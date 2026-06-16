@@ -1,0 +1,54 @@
+﻿
+================================================================
+ESP32 motor voltage-speed calibration
+Equivalent voltage = 7.40 V * PWM duty
+Encoder CPR = 60
+Duty step = 5%, samples per point = 20
+Maximum accepted speed = 1000.0 RPM
+Lift the car before starting. Each wheel is tested separately.
+================================================================
+
+Calibrating motor1 forward...
+motor,direction,duty,voltage,rpm
+SAMPLE,motor1,forward,0.0,0.000,1,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,2,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,3,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,4,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,5,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,6,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,7,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,8,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,9,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,10,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,11,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,12,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,13,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,14,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,15,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,16,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,17,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,18,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,19,0.000,0,valid
+SAMPLE,motor1,forward,0.0,0.000,20,0.000,0,valid
+motor1,forward,0.0,0.000,0.000,valid
+SAMPLE,motor1,forward,5.0,0.370,1,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,2,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,3,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,4,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,5,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,6,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,7,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,8,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,9,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,10,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,11,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,12,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,13,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,14,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,15,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,16,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,17,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,18,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,19,0.000,0,valid
+SAMPLE,motor1,forward,5.0,0.370,20,0.000,0,valid
+motor1,forward,5.0,0.370,0.000,valid

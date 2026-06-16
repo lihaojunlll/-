@@ -1,31 +1,34 @@
 param(
-    [string]$Port = "COM5",
-    [int]$Baud = 115200
+    [string]$Port = "COM8",
+    [int]$BaudRate = 115200
 )
 
-$env:PYTHONUTF8 = "1"
+$ErrorActionPreference = "Stop"
 
-if (-not (Test-Path -LiteralPath "serial_monitor.py")) {
-    throw "serial_monitor.py not found."
+Write-Host "Opening ESP32 serial monitor on $Port at $BaudRate."
+Write-Host "Exit with Ctrl+C."
+Write-Host ""
+
+$SerialPort = New-Object System.IO.Ports.SerialPort $Port, $BaudRate, None, 8, one
+$SerialPort.Encoding = [System.Text.Encoding]::ASCII
+$SerialPort.ReadTimeout = 200
+
+try {
+    $SerialPort.Open()
+    while ($true) {
+        try {
+            $Text = $SerialPort.ReadExisting()
+            if ($Text.Length -gt 0) {
+                Write-Host -NoNewline $Text
+            }
+        }
+        catch [System.TimeoutException] {
+        }
+        Start-Sleep -Milliseconds 20
+    }
 }
-
-if (-not (Get-Command mpremote -ErrorAction SilentlyContinue)) {
-    throw "mpremote not found. Run: python -m pip install mpremote"
+finally {
+    if ($SerialPort.IsOpen) {
+        $SerialPort.Close()
+    }
 }
-
-$mpremotePath = (Get-Command mpremote).Source
-$pythonRoot = Split-Path (Split-Path $mpremotePath -Parent) -Parent
-$pythonPath = Join-Path $pythonRoot "python.exe"
-
-if (-not (Test-Path -LiteralPath $pythonPath)) {
-    throw "Python executable not found: $pythonPath"
-}
-
-& $pythonPath -c "import serial" 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw "pyserial not found. Run: `"$pythonPath`" -m pip install pyserial"
-}
-
-Write-Host "Connecting to ESP32 serial port: $Port"
-Write-Host "Use Ctrl+] to exit, or Ctrl+C to interrupt the program."
-& $pythonPath "serial_monitor.py" --port $Port --baud $Baud
