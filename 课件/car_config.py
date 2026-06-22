@@ -3,7 +3,7 @@
 # - "gray"：灰度传感器 ADC 实时监视，电机保持不初始化、不转动。
 # - "i2c_scan"：自动遍历 I2C 引脚组合，找出 MPU6050 接在哪两个 GPIO。
 # - "mpu6050"：MPU6050 陀螺仪+加速度实时打印，需要先在 i2c_scan 找到引脚。
-TEST_MODE = "i2c_scan"
+TEST_MODE = "gray"
 
 # MPU6050 I2C 引脚（先用 i2c_scan 模式扫出来再填）。
 MPU6050_SCL = 22
