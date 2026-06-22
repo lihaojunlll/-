@@ -3,22 +3,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectDir = $PSScriptRoot
 $CalibrationFile = Join-Path $ProjectDir "motor_calibration.py"
 $ConfigFile = Join-Path $ProjectDir "car_config.py"
-$ReportBuilder = Join-Path $ProjectDir "build_calibration_report.mjs"
-$RuntimeRoot = "C:\Users\17991\.cache\codex-runtimes\codex-primary-runtime\dependencies"
-$NodeExe = Join-Path $RuntimeRoot "node\bin\node.exe"
-$NodePackages = Join-Path $RuntimeRoot "node\node_modules"
-$ResultRoot = Join-Path $ProjectDir "calibration_results"
-$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$ResultDir = Join-Path $ResultRoot $Timestamp
-$LogFile = Join-Path $ResultDir "calibration_raw_log.txt"
-$ExcelFile = Join-Path $ResultDir "motor_voltage_speed_calibration.xlsx"
-$PreviewFile = Join-Path $ResultDir "motor_voltage_speed_chart.png"
-$RuntimeDir = Join-Path $env:TEMP "car-calibration-report"
-$RuntimeNodeModules = Join-Path $RuntimeDir "node_modules"
-$RuntimeBuilder = Join-Path $RuntimeDir "build_calibration_report.mjs"
 
 if (-not (Test-Path -LiteralPath $CalibrationFile)) {
     throw "Calibration file not found: $CalibrationFile"
@@ -28,23 +15,9 @@ if (-not (Test-Path -LiteralPath $ConfigFile)) {
     throw "Config file not found: $ConfigFile"
 }
 
-if (-not (Test-Path -LiteralPath $ReportBuilder)) {
-    throw "Report builder not found: $ReportBuilder"
-}
-
 if (-not (Get-Command mpremote -ErrorAction SilentlyContinue)) {
     throw "mpremote not found. Run: python -m pip install mpremote"
 }
-
-if (-not (Test-Path -LiteralPath $NodeExe)) {
-    throw "Codex spreadsheet runtime not found: $NodeExe"
-}
-
-if (-not (Test-Path -LiteralPath $NodePackages)) {
-    throw "Codex spreadsheet packages not found: $NodePackages"
-}
-
-New-Item -ItemType Directory -Path $ResultDir -Force | Out-Null
 
 $ModeLine = Select-String -LiteralPath $ConfigFile -Pattern '^\s*TEST_MODE\s*=\s*"([^"]+)"' |
     Select-Object -First 1
@@ -73,10 +46,25 @@ elseif ($TestMode -eq "mpu6050") {
     Write-Host "Motors will not be initialized."
     Write-Host "Press Ctrl+C to stop the MPU6050 monitor."
 }
+elseif ($TestMode -eq "uart_recv") {
+    Write-Host "Running UART receive debug on $Port..."
+    Write-Host "Motors will not be initialized."
+    Write-Host "Press Ctrl+C to stop and print stats."
+}
 else {
     throw "Unknown TEST_MODE: $TestMode"
 }
 Write-Host ""
+
+$ResultRoot = Join-Path $ProjectDir "calibration_results"
+$Timestamp = (Get-Date).ToString("yyyyMMdd_HHmmss")
+$ResultDir = Join-Path $ResultRoot $Timestamp
+New-Item -ItemType Directory -Path $ResultDir -Force | Out-Null
+$LogFile = Join-Path $ResultDir "calibration_raw_log.txt"
+
+Write-Host "Stopping any running program on $Port..."
+mpremote connect $Port soft-reset 2>&1 | Out-Null
+Start-Sleep -Seconds 3
 
 & mpremote connect $Port cp $ConfigFile :car_config.py
 if ($LASTEXITCODE -ne 0) {
@@ -110,11 +98,30 @@ if ($CalibrationExitCode -ne 0) {
     throw "Calibration failed. Check the port, wiring, and serial-port usage."
 }
 
-if ($TestMode -eq "gray") {
+if ($TestMode -ne "motor") {
     Write-Host ""
-    Write-Host "Gray sensor log saved:"
-    Write-Host "  Raw log: $LogFile"
+    Write-Host "Raw log saved: $LogFile"
     return
+}
+
+$ReportBuilder = Join-Path $ProjectDir "build_calibration_report.mjs"
+$RuntimeRoot = "C:\Users\17991\.cache\codex-runtimes\codex-primary-runtime\dependencies"
+$NodeExe = Join-Path $RuntimeRoot "node\bin\node.exe"
+$NodePackages = Join-Path $RuntimeRoot "node\node_modules"
+$ExcelFile = Join-Path $ResultDir "motor_voltage_speed_calibration.xlsx"
+$PreviewFile = Join-Path $ResultDir "motor_voltage_speed_chart.png"
+$RuntimeDir = Join-Path $env:TEMP "car-calibration-report"
+$RuntimeNodeModules = Join-Path $RuntimeDir "node_modules"
+$RuntimeBuilder = Join-Path $RuntimeDir "build_calibration_report.mjs"
+
+if (-not (Test-Path -LiteralPath $ReportBuilder)) {
+    throw "Report builder not found: $ReportBuilder"
+}
+if (-not (Test-Path -LiteralPath $NodeExe)) {
+    throw "Codex spreadsheet runtime not found: $NodeExe"
+}
+if (-not (Test-Path -LiteralPath $NodePackages)) {
+    throw "Codex spreadsheet packages not found: $NodePackages"
 }
 
 New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null

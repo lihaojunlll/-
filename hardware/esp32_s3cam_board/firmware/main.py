@@ -1,11 +1,17 @@
 import config
 import time
+from machine import UART
 from algorithms.attitude import AttitudeEstimator
 from interfaces.mpu6050 import MPU6050
 
 
 def main():
     print("S3CAM started.")
+
+    uart = UART(1, baudrate=config.UART_BAUDRATE,
+                tx=config.UART_TX_PIN, rx=config.UART_RX_PIN)
+    print("UART(1) init: tx=GPIO%d rx=GPIO%d baud=%d" % (
+        config.UART_TX_PIN, config.UART_RX_PIN, config.UART_BAUDRATE))
 
     imu = MPU6050(
         scl_pin=config.MPU6050_SCL_PIN,
@@ -31,6 +37,7 @@ def main():
         print("Camera initialized.")
 
     attitude = AttitudeEstimator(alpha=config.ATTITUDE_ALPHA)
+    seq = 0
 
     print(" Accel(m/s2)        Gyro(dps)        Attitude(deg)")
     print(" X     Y     Z      X    Y    Z     Pitch  Roll   Yaw")
@@ -39,6 +46,11 @@ def main():
     while True:
         ax, ay, az, gx, gy, gz = imu.read()
         pitch, roll, yaw = attitude.update(ax, ay, az, gx, gy, gz)
+        seq += 1
+
+        data = "IMU,%d,%.2f,%.2f,%.2f\n" % (seq, pitch, roll, yaw)
+        uart.write(data)
+        print("UART_SEND,%d,%.2f,%.2f,%.2f" % (seq, pitch, roll, yaw))
 
         if config.DEBUG_PRINT:
             parts = [

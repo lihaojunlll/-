@@ -3,7 +3,8 @@
 # - "gray"：灰度传感器 ADC 实时监视，电机保持不初始化、不转动。
 # - "i2c_scan"：自动遍历 I2C 引脚组合，找出 MPU6050 接在哪两个 GPIO。
 # - "mpu6050"：MPU6050 陀螺仪+加速度实时打印，需要先在 i2c_scan 找到引脚。
-TEST_MODE = "gray"
+# - "uart_recv"：UART 接收调试，打印 S3CAM 发来的姿态帧并检测丢包。
+TEST_MODE = "uart_recv"
 
 # MPU6050 I2C 引脚（先用 i2c_scan 模式扫出来再填）。
 MPU6050_SCL = 22
@@ -40,3 +41,10 @@ GRAY_SAMPLE_INTERVAL_MS = 200
 # 如果你的模块在黑色时输出更大的 raw 值，把它改成 False。
 GRAY_THRESHOLD = 500
 GRAY_BLACK_WHEN_BELOW_THRESHOLD = True
+
+# UART 接收调试配置（由 S3CAM TX=GPIO45 发来）。
+# RX=GPIO22 <- S3CAM TX=GPIO45
+# TX=GPIO23 -> S3CAM RX=GPIO46
+UART_RX_PIN = 22
+UART_TX_PIN = 23
+UART_BAUDRATE = 115200

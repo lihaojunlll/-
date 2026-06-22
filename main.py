@@ -69,6 +69,9 @@ def build_app():
         drive,
         policy,
         config.CONTROL_PERIOD_MS,
+        config.UART_RX_PIN,
+        config.UART_TX_PIN,
+        config.UART_BAUDRATE,
         config.DEBUG_PRINT,
     )
 

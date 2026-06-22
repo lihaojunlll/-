@@ -1,4 +1,4 @@
-from machine import ADC, I2C, Pin, PWM
+from machine import ADC, I2C, Pin, PWM, UART
 import struct
 import time
 import car_config as config
@@ -376,6 +376,61 @@ def run_motor_calibration():
         print("Motors stopped and PWM released.")
 
 
+def run_uart_recv_monitor():
+    print("=" * 64)
+    print("UART receive debug - monitoring S3CAM attitude frames")
+    print("RX=GPIO{} TX=GPIO{} baud={}".format(
+        config.UART_RX_PIN, config.UART_TX_PIN, config.UART_BAUDRATE))
+    print("Format: UART_RECV,seq,pitch,roll,yaw")
+    print("Packet loss: UART_LOST,start,end")
+    print("=" * 64)
+
+    uart = UART(2, baudrate=config.UART_BAUDRATE,
+                tx=config.UART_TX_PIN, rx=config.UART_RX_PIN)
+    print("UART(2) ready.\n")
+
+    last_seq = 0
+    recv_count = 0
+    lost_count = 0
+    try:
+        while True:
+            while uart.any():
+                try:
+                    line = uart.readline()
+                    if line and line.startswith(b"IMU,"):
+                        raw = line.decode().strip()
+                        parts = raw.split(",")
+                        if len(parts) == 5:
+                            seq = int(parts[1])
+                            pitch = float(parts[2])
+                            roll = float(parts[3])
+                            yaw = float(parts[4])
+                            recv_count += 1
+                            print("UART_RECV,%d,%.2f,%.2f,%.2f" % (
+                                seq, pitch, roll, yaw))
+                            if last_seq > 0 and seq != last_seq + 1:
+                                lost_start = last_seq + 1
+                                lost_end = seq - 1
+                                lost = lost_end - lost_start + 1
+                                lost_count += lost
+                                if lost_start == lost_end:
+                                    print("UART_LOST,%d" % lost_start)
+                                else:
+                                    print("UART_LOST,%d,%d" % (
+                                        lost_start, lost_end))
+                            last_seq = seq
+                except Exception as e:
+                    print("UART_ERR,%s" % e)
+            time.sleep_ms(5)
+    except KeyboardInterrupt:
+        print("\n--- UART receive stats ---")
+        print("Received: %d frames" % recv_count)
+        print("Lost: %d frames" % lost_count)
+        if recv_count + lost_count > 0:
+            print("Loss rate: %.1f%%" % (
+                100.0 * lost_count / (recv_count + lost_count)))
+
+
 def main():
     mode = config.TEST_MODE.lower()
     print("TEST_MODE={}".format(mode))
@@ -387,6 +442,8 @@ def main():
         run_i2c_scan()
     elif mode == "mpu6050":
         run_mpu6050_monitor()
+    elif mode == "uart_recv":
+        run_uart_recv_monitor()
     else:
         raise ValueError("Unknown TEST_MODE: {}".format(config.TEST_MODE))
 
