@@ -1,4 +1,5 @@
-from machine import ADC, Pin, PWM
+from machine import ADC, I2C, Pin, PWM
+import struct
 import time
 import car_config as config
 
@@ -111,6 +112,81 @@ def run_gray_monitor():
             time.sleep_ms(config.GRAY_SAMPLE_INTERVAL_MS)
     except KeyboardInterrupt:
         print("\nGray sensor monitor stopped.")
+
+
+class MPU6050:
+    def __init__(self, i2c, addr=0x68):
+        self.i2c = i2c
+        self.addr = addr
+        self._w(0x6B, 0x00)
+        self._w(0x1C, 0x00)
+        self._w(0x1B, 0x00)
+
+    def _r(self, reg, n):
+        return self.i2c.readfrom_mem(self.addr, reg, n)
+
+    def _w(self, reg, v):
+        self.i2c.writeto_mem(self.addr, reg, bytes([v]))
+
+    def read(self):
+        a = self._r(0x3B, 6)
+        g = self._r(0x43, 6)
+        ax, ay, az = struct.unpack(">hhh", a)
+        gx, gy, gz = struct.unpack(">hhh", g)
+        return (ax / 16384.0, ay / 16384.0, az / 16384.0,
+                gx / 131.0, gy / 131.0, gz / 131.0)
+
+
+def run_i2c_scan():
+    print("=" * 64)
+    print("I2C scanner - find MPU6050 pins")
+    print("=" * 64)
+    pairs = [
+        (22, 21), (21, 22), (18, 19), (19, 18),
+        (26, 27), (25, 26), (23, 22),
+        (16, 17), (5, 18), (14, 27),
+    ]
+    found = False
+    for scl, sda in pairs:
+        try:
+            i2c = I2C(0, scl=Pin(scl), sda=Pin(sda), freq=100000)
+            devs = i2c.scan()
+            if devs:
+                print("SCL=%2d SDA=%2d -> %s" % (scl, sda, [hex(d) for d in devs]))
+                found = True
+        except Exception as e:
+            print("SCL=%2d SDA=%2d -> skip (%s)" % (scl, sda, e))
+    if not found:
+        print("No I2C devices found.")
+    print("Scan complete.")
+
+
+def run_mpu6050_monitor():
+    scl = getattr(config, 'MPU6050_SCL', 22)
+    sda = getattr(config, 'MPU6050_SDA', 21)
+    print("=" * 64)
+    print("MPU6050 monitor")
+    print("I2C: SCL=GPIO%d, SDA=GPIO%d" % (scl, sda))
+    print("=" * 64)
+
+    i2c = I2C(0, scl=Pin(scl), sda=Pin(sda), freq=400000)
+    devs = i2c.scan()
+    print("I2C devices: %s" % [hex(d) for d in devs])
+
+    if 0x68 not in devs:
+        print("MPU6050 NOT FOUND at 0x68!")
+        return
+
+    imu = MPU6050(i2c)
+    print("ax(g),ay(g),az(g),gx(dps),gy(dps),gz(dps)")
+    print("-" * 52)
+    try:
+        while True:
+            ax, ay, az, gx, gy, gz = imu.read()
+            print("%.2f,%.2f,%.2f,%.1f,%.1f,%.1f" % (ax, ay, az, gx, gy, gz))
+            time.sleep_ms(100)
+    except KeyboardInterrupt:
+        print("\nMPU6050 monitor stopped.")
 
 
 def measure_rpm(motor):
@@ -307,6 +383,10 @@ def main():
         run_gray_monitor()
     elif mode == "motor":
         run_motor_calibration()
+    elif mode == "i2c_scan":
+        run_i2c_scan()
+    elif mode == "mpu6050":
+        run_mpu6050_monitor()
     else:
         raise ValueError("Unknown TEST_MODE: {}".format(config.TEST_MODE))
 

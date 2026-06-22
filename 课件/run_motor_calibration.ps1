@@ -64,6 +64,15 @@ elseif ($TestMode -eq "gray") {
     Write-Host "Motors will not be initialized."
     Write-Host "Press Ctrl+C to stop the gray sensor monitor."
 }
+elseif ($TestMode -eq "i2c_scan") {
+    Write-Host "Running I2C pin scanner on $Port..."
+    Write-Host "Motors will not be initialized."
+}
+elseif ($TestMode -eq "mpu6050") {
+    Write-Host "Running MPU6050 monitor on $Port..."
+    Write-Host "Motors will not be initialized."
+    Write-Host "Press Ctrl+C to stop the MPU6050 monitor."
+}
 else {
     throw "Unknown TEST_MODE: $TestMode"
 }

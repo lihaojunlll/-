@@ -1,7 +1,13 @@
 # 测试模式：
 # - "motor"：电机电压-转速标定，结束后生成 Excel 和图像。
 # - "gray"：灰度传感器 ADC 实时监视，电机保持不初始化、不转动。
-TEST_MODE = "gray"
+# - "i2c_scan"：自动遍历 I2C 引脚组合，找出 MPU6050 接在哪两个 GPIO。
+# - "mpu6050"：MPU6050 陀螺仪+加速度实时打印，需要先在 i2c_scan 找到引脚。
+TEST_MODE = "i2c_scan"
+
+# MPU6050 I2C 引脚（先用 i2c_scan 模式扫出来再填）。
+MPU6050_SCL = 22
+MPU6050_SDA = 21
 
 
 # 电机标定配置。
