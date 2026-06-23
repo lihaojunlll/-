@@ -60,9 +60,8 @@ function Sync-AsciiBuildDir {
     Copy-Item -LiteralPath (Join-Path $ScriptDir "sdkconfig.defaults") -Destination $BuildDir -Force
     Copy-Item -LiteralPath (Join-Path $ScriptDir "README.md") -Destination $BuildDir -Force
     Copy-Item -LiteralPath (Join-Path $ScriptDir ".gitignore") -Destination $BuildDir -Force -ErrorAction SilentlyContinue
-    Copy-Item -LiteralPath (Join-Path $ScriptDir "main\CMakeLists.txt") -Destination (Join-Path $BuildDir "main") -Force
-    Copy-Item -LiteralPath (Join-Path $ScriptDir "main\idf_component.yml") -Destination (Join-Path $BuildDir "main") -Force
-    Copy-Item -LiteralPath (Join-Path $ScriptDir "main\main.c") -Destination (Join-Path $BuildDir "main") -Force
+    $srcMainDir = Join-Path $ScriptDir "main"
+    Copy-Item -LiteralPath (Join-Path $srcMainDir "*") -Destination (Join-Path $BuildDir "main") -Recurse -Force
 }
 
 function Assert-PortExists {
