@@ -2,8 +2,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "driver/ledc.h"
+#include "driver/i2c_master.h"
+#include "driver/uart.h"
 #include "esp_camera.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -17,9 +20,10 @@
 #include "nvs_flash.h"
 
 static const char *TAG = "s3cam_web";
+static const char *IMU_TAG = "imu";
 
 #define WIFI_AP_SSID      "S3CAM"
-#define WIFI_AP_PASSWORD  "12345678"
+#define WIFI_AP_PASSWORD  ""
 #define WIFI_AP_CHANNEL   6
 #define WIFI_AP_MAX_CONN  4
 
@@ -40,6 +44,38 @@ static const char *TAG = "s3cam_web";
 #define CAM_PIN_VSYNC  6
 #define CAM_PIN_HREF   7
 #define CAM_PIN_PCLK   13
+
+#define I2C_MASTER_NUM         I2C_NUM_0
+#define I2C_MASTER_SCL_IO      21
+#define I2C_MASTER_SDA_IO      47
+#define I2C_MASTER_FREQ_HZ     400000
+#define MPU6050_ADDR_LOW       0x68
+#define MPU6050_ADDR_HIGH      0x69
+
+#define MPU6050_REG_PWR_MGMT_1   0x6B
+#define MPU6050_REG_ACCEL_CONFIG 0x1C
+#define MPU6050_REG_GYRO_CONFIG  0x1B
+#define MPU6050_REG_ACCEL_XOUT_H 0x3B
+#define MPU6050_REG_GYRO_XOUT_H  0x43
+#define MPU6050_REG_WHO_AM_I     0x75
+
+#define ACCEL_SCALE  16384.0f
+#define GYRO_SCALE   131.0f
+
+#define UART_PORT_NUM    UART_NUM_1
+#define UART_TX_PIN      45
+#define UART_RX_PIN      46
+#define UART_BAUDRATE    115200
+
+#define ATTITUDE_ALPHA       0.96f
+#define CONTROL_PERIOD_MS    10
+
+static float ax_off = 0, ay_off = 0, az_off = 0;
+static float gx_off = 0, gy_off = 0, gz_off = 0;
+static float az_scale = 1.0f;
+
+static float pitch = 0, roll = 0, yaw = 0;
+static int64_t last_time_us = 0;
 
 static camera_config_t camera_config = {
     .pin_pwdn = CAM_PIN_PWDN,
@@ -83,8 +119,229 @@ static const char INDEX_HTML[] =
     "<p><a href='/jpg' target='_blank'>Open Snapshot</a>"
     "<button onclick=\"document.getElementById('view').src='/jpg?t='+Date.now()\">Snapshot Mode</button>"
     "<button onclick=\"document.getElementById('view').src='/stream?t='+Date.now()\">Stream Mode</button></p>"
-    "<p>Connect to Wi-Fi: S3CAM / 12345678, then open http://192.168.4.1/</p>"
+    "<p>Connect to Wi-Fi: S3CAM, then open http://192.168.4.1/</p>"
     "</div></body></html>";
+
+static i2c_master_bus_handle_t i2c_bus;
+static i2c_master_dev_handle_t i2c_dev;
+static uint8_t mpu6050_addr = MPU6050_ADDR_LOW;
+
+static void i2c_master_init(void)
+{
+    i2c_master_bus_config_t bus_cfg = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = I2C_MASTER_NUM,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .glitch_ignore_cnt = 7,
+        .intr_priority = 0,
+        .trans_queue_depth = 4,
+        .flags.enable_internal_pullup = true,
+    };
+    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &i2c_bus));
+
+    ESP_LOGI(IMU_TAG, "I2C(%d) init: scl=GPIO%d sda=GPIO%d freq=%d",
+             I2C_MASTER_NUM, I2C_MASTER_SCL_IO, I2C_MASTER_SDA_IO,
+             I2C_MASTER_FREQ_HZ);
+}
+
+static bool mpu6050_attach_device(void)
+{
+    const uint8_t candidates[] = {MPU6050_ADDR_LOW, MPU6050_ADDR_HIGH};
+
+    for (size_t i = 0; i < sizeof(candidates); i++) {
+        uint8_t addr = candidates[i];
+        esp_err_t probe_ret = i2c_master_probe(i2c_bus, addr, pdMS_TO_TICKS(50));
+        ESP_LOGI(IMU_TAG, "I2C probe 0x%02X: %s", addr, esp_err_to_name(probe_ret));
+        if (probe_ret != ESP_OK) {
+            continue;
+        }
+
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = addr,
+            .scl_speed_hz = I2C_MASTER_FREQ_HZ,
+        };
+        esp_err_t add_ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg, &i2c_dev);
+        if (add_ret != ESP_OK) {
+            ESP_LOGE(IMU_TAG, "Add I2C device 0x%02X failed: %s", addr, esp_err_to_name(add_ret));
+            continue;
+        }
+
+        mpu6050_addr = addr;
+        ESP_LOGI(IMU_TAG, "MPU6050 attached at I2C address 0x%02X", mpu6050_addr);
+        return true;
+    }
+
+    ESP_LOGE(IMU_TAG, "MPU6050 not found at 0x68 or 0x69. Camera web server will keep running.");
+    return false;
+}
+
+static void mpu6050_write_reg(uint8_t reg, uint8_t val)
+{
+    uint8_t buf[2] = {reg, val};
+    esp_err_t ret = i2c_master_transmit(i2c_dev, buf, 2, pdMS_TO_TICKS(20));
+    if (ret != ESP_OK) {
+        ESP_LOGE(IMU_TAG, "I2C write reg 0x%02X failed: %d", reg, ret);
+    }
+}
+
+static esp_err_t mpu6050_read_regs(uint8_t reg, uint8_t *data, size_t len)
+{
+    esp_err_t ret = i2c_master_transmit_receive(i2c_dev, &reg, 1, data, len, pdMS_TO_TICKS(20));
+    if (ret != ESP_OK) {
+        ESP_LOGE(IMU_TAG, "I2C read reg 0x%02X failed: %d", reg, ret);
+    }
+    return ret;
+}
+
+static uint8_t mpu6050_whoami(void)
+{
+    uint8_t who = 0;
+    mpu6050_read_regs(MPU6050_REG_WHO_AM_I, &who, 1);
+    return who;
+}
+
+static void mpu6050_init_sensor(void)
+{
+    mpu6050_write_reg(MPU6050_REG_PWR_MGMT_1, 0x00);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    mpu6050_write_reg(MPU6050_REG_ACCEL_CONFIG, 0x00);
+    mpu6050_write_reg(MPU6050_REG_GYRO_CONFIG, 0x00);
+}
+
+static void mpu6050_read_raw(float *ax, float *ay, float *az, float *gx, float *gy, float *gz)
+{
+    uint8_t data[14];
+    mpu6050_read_regs(MPU6050_REG_ACCEL_XOUT_H, data, 14);
+
+    *ax = (int16_t)((data[0] << 8) | data[1]) / ACCEL_SCALE;
+    *ay = (int16_t)((data[2] << 8) | data[3]) / ACCEL_SCALE;
+    *az = (int16_t)((data[4] << 8) | data[5]) / ACCEL_SCALE;
+    *gx = (int16_t)((data[8] << 8) | data[9]) / GYRO_SCALE;
+    *gy = (int16_t)((data[10] << 8) | data[11]) / GYRO_SCALE;
+    *gz = (int16_t)((data[12] << 8) | data[13]) / GYRO_SCALE;
+}
+
+static void mpu6050_calibrate(int samples)
+{
+    float sum_ax = 0, sum_ay = 0, sum_az = 0;
+    float sum_gx = 0, sum_gy = 0, sum_gz = 0;
+
+    for (int i = 0; i < samples; i++) {
+        float ax, ay, az, gx, gy, gz;
+        mpu6050_read_raw(&ax, &ay, &az, &gx, &gy, &gz);
+        sum_ax += ax;
+        sum_ay += ay;
+        sum_az += az;
+        sum_gx += gx;
+        sum_gy += gy;
+        sum_gz += gz;
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+
+    ax_off = sum_ax / samples;
+    ay_off = sum_ay / samples;
+    az_off = sum_az / samples - 1.0f;
+    az_scale = 1.0f;
+    gx_off = sum_gx / samples;
+    gy_off = sum_gy / samples;
+    gz_off = sum_gz / samples;
+
+    ESP_LOGI(IMU_TAG, "Calibrated %d samples, offsets: ax=%.4f ay=%.4f az=%.4f gx=%.4f gy=%.4f gz=%.4f",
+             samples, ax_off, ay_off, az_off, gx_off, gy_off, gz_off);
+}
+
+static void mpu6050_read(float *ax, float *ay, float *az, float *gx, float *gy, float *gz)
+{
+    mpu6050_read_raw(ax, ay, az, gx, gy, gz);
+    *ax = *ax - ax_off;
+    *ay = *ay - ay_off;
+    *az = (*az - az_off) * az_scale;
+    *gx = *gx - gx_off;
+    *gy = *gy - gy_off;
+    *gz = *gz - gz_off;
+}
+
+static void uart_init(void)
+{
+    uart_config_t uart_config = {
+        .baud_rate = UART_BAUDRATE,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    ESP_ERROR_CHECK(uart_driver_install(UART_PORT_NUM, 256, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, UART_TX_PIN, UART_RX_PIN,
+                                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_LOGI(IMU_TAG, "UART(%d) init: tx=GPIO%d rx=GPIO%d baud=%d",
+             UART_PORT_NUM, UART_TX_PIN, UART_RX_PIN, UART_BAUDRATE);
+}
+
+static float wrap_180(float angle)
+{
+    float r = fmodf(angle + 180.0f, 360.0f);
+    if (r < 0) r += 360.0f;
+    return r - 180.0f;
+}
+
+static void attitude_update(float ax, float ay, float az, float gx, float gy, float gz, float dt)
+{
+    float acc_pitch = atan2f(-ax, sqrtf(ay * ay + az * az)) * 57.2958f;
+    float acc_roll = atan2f(ay, az) * 57.2958f;
+
+    pitch = ATTITUDE_ALPHA * (pitch + gx * dt) + (1.0f - ATTITUDE_ALPHA) * acc_pitch;
+    roll = ATTITUDE_ALPHA * (roll + gy * dt) + (1.0f - ATTITUDE_ALPHA) * acc_roll;
+    yaw += gz * dt;
+
+    pitch = wrap_180(pitch);
+    roll = wrap_180(roll);
+    yaw = wrap_180(yaw);
+}
+
+static void imu_task(void *arg)
+{
+    uint8_t who = mpu6050_whoami();
+    ESP_LOGI(IMU_TAG, "MPU6050 WHO_AM_I: 0x%02X (expected 0x68)", who);
+    if (who != 0x68) {
+        ESP_LOGE(IMU_TAG, "MPU6050 not detected! Check I2C wiring.");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    mpu6050_init_sensor();
+    mpu6050_calibrate(200);
+    last_time_us = esp_timer_get_time();
+
+    int seq = 0;
+    while (true) {
+        float ax, ay, az, gx, gy, gz;
+        mpu6050_read(&ax, &ay, &az, &gx, &gy, &gz);
+
+        int64_t now = esp_timer_get_time();
+        float dt = (float)(now - last_time_us) / 1000000.0f;
+        last_time_us = now;
+
+        if (dt > 0 && dt < 1.0f) {
+            attitude_update(ax, ay, az, gx, gy, gz, dt);
+        }
+
+        seq++;
+
+        char buf[64];
+        int len = snprintf(buf, sizeof(buf), "IMU,%d,%.2f,%.2f,%.2f\n",
+                           seq, pitch, roll, yaw);
+        uart_write_bytes(UART_PORT_NUM, buf, len);
+
+        ESP_LOGI(IMU_TAG, "IMU,%d,%.2f,%.2f,%.2f | raw:ax=%.2f ay=%.2f az=%.2f gx=%.1f gy=%.1f gz=%.1f",
+                 seq, pitch, roll, yaw, ax, ay, az, gx, gy, gz);
+
+        vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS));
+    }
+}
 
 static esp_err_t index_handler(httpd_req_t *req)
 {
@@ -228,8 +485,8 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_ret);
     }
 
-    ESP_LOGI(TAG, "ESP32-S3 camera web server starting");
-    ESP_LOGI(TAG, "pins: xclk=%d pclk=%d vsync=%d href=%d siod=%d sioc=%d",
+    ESP_LOGI(TAG, "ESP32-S3 camera + IMU + UART web server starting");
+    ESP_LOGI(TAG, "Camera pins: xclk=%d pclk=%d vsync=%d href=%d siod=%d sioc=%d",
              CAM_PIN_XCLK, CAM_PIN_PCLK, CAM_PIN_VSYNC, CAM_PIN_HREF,
              CAM_PIN_SIOD, CAM_PIN_SIOC);
 
@@ -249,6 +506,12 @@ void app_main(void)
     ESP_LOGI(TAG, "Camera initialized");
     start_wifi_ap();
     start_camera_server();
+
+    uart_init();
+    i2c_master_init();
+    if (mpu6050_attach_device()) {
+        xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
+    }
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
