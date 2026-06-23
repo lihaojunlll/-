@@ -48,7 +48,7 @@ static const char *IMU_TAG = "imu";
 #define I2C_MASTER_NUM         I2C_NUM_0
 #define I2C_MASTER_SCL_IO      21
 #define I2C_MASTER_SDA_IO      47
-#define I2C_MASTER_FREQ_HZ     400000
+#define I2C_MASTER_FREQ_HZ     100000
 #define MPU6050_ADDR_LOW       0x68
 #define MPU6050_ADDR_HIGH      0x69
 
@@ -69,6 +69,7 @@ static const char *IMU_TAG = "imu";
 
 #define ATTITUDE_ALPHA       0.96f
 #define CONTROL_PERIOD_MS    10
+#define IMU_PRINT_PERIOD_MS  200
 
 static float ax_off = 0, ay_off = 0, az_off = 0;
 static float gx_off = 0, gy_off = 0, gz_off = 0;
@@ -135,28 +136,38 @@ static void i2c_master_init(void)
         .sda_io_num = I2C_MASTER_SDA_IO,
         .glitch_ignore_cnt = 7,
         .intr_priority = 0,
-        .trans_queue_depth = 4,
         .flags.enable_internal_pullup = true,
     };
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &i2c_bus));
-
     ESP_LOGI(IMU_TAG, "I2C(%d) init: scl=GPIO%d sda=GPIO%d freq=%d",
              I2C_MASTER_NUM, I2C_MASTER_SCL_IO, I2C_MASTER_SDA_IO,
              I2C_MASTER_FREQ_HZ);
 }
 
+static esp_err_t i2c_read_regs(uint8_t reg, uint8_t *data, size_t len)
+{
+    memset(data, 0, len);
+
+    esp_err_t ret = i2c_master_transmit(i2c_dev, &reg, 1, pdMS_TO_TICKS(200));
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(2));
+    return i2c_master_receive(i2c_dev, data, len, pdMS_TO_TICKS(200));
+}
+
+static esp_err_t i2c_write_reg(uint8_t reg, uint8_t val)
+{
+    uint8_t buf[2] = {reg, val};
+    return i2c_master_transmit(i2c_dev, buf, sizeof(buf), pdMS_TO_TICKS(100));
+}
+
 static bool mpu6050_attach_device(void)
 {
     const uint8_t candidates[] = {MPU6050_ADDR_LOW, MPU6050_ADDR_HIGH};
-
     for (size_t i = 0; i < sizeof(candidates); i++) {
         uint8_t addr = candidates[i];
-        esp_err_t probe_ret = i2c_master_probe(i2c_bus, addr, pdMS_TO_TICKS(50));
-        ESP_LOGI(IMU_TAG, "I2C probe 0x%02X: %s", addr, esp_err_to_name(probe_ret));
-        if (probe_ret != ESP_OK) {
-            continue;
-        }
-
         i2c_device_config_t dev_cfg = {
             .dev_addr_length = I2C_ADDR_BIT_LEN_7,
             .device_address = addr,
@@ -168,9 +179,19 @@ static bool mpu6050_attach_device(void)
             continue;
         }
 
-        mpu6050_addr = addr;
-        ESP_LOGI(IMU_TAG, "MPU6050 attached at I2C address 0x%02X", mpu6050_addr);
-        return true;
+        vTaskDelay(pdMS_TO_TICKS(20));
+        uint8_t who = 0;
+        esp_err_t ret = i2c_read_regs(MPU6050_REG_WHO_AM_I, &who, 1);
+        ESP_LOGI(IMU_TAG, "I2C read WHO_AM_I at 0x%02X: %s, value=0x%02X",
+                 addr, esp_err_to_name(ret), who);
+        if (ret == ESP_OK && who == 0x68) {
+            mpu6050_addr = addr;
+            ESP_LOGI(IMU_TAG, "MPU6050 attached at I2C address 0x%02X", mpu6050_addr);
+            return true;
+        }
+
+        ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_rm_device(i2c_dev));
+        i2c_dev = NULL;
     }
 
     ESP_LOGE(IMU_TAG, "MPU6050 not found at 0x68 or 0x69. Camera web server will keep running.");
@@ -179,18 +200,17 @@ static bool mpu6050_attach_device(void)
 
 static void mpu6050_write_reg(uint8_t reg, uint8_t val)
 {
-    uint8_t buf[2] = {reg, val};
-    esp_err_t ret = i2c_master_transmit(i2c_dev, buf, 2, pdMS_TO_TICKS(20));
+    esp_err_t ret = i2c_write_reg(reg, val);
     if (ret != ESP_OK) {
-        ESP_LOGE(IMU_TAG, "I2C write reg 0x%02X failed: %d", reg, ret);
+        ESP_LOGE(IMU_TAG, "I2C write reg 0x%02X failed: %s", reg, esp_err_to_name(ret));
     }
 }
 
 static esp_err_t mpu6050_read_regs(uint8_t reg, uint8_t *data, size_t len)
 {
-    esp_err_t ret = i2c_master_transmit_receive(i2c_dev, &reg, 1, data, len, pdMS_TO_TICKS(20));
+    esp_err_t ret = i2c_read_regs(reg, data, len);
     if (ret != ESP_OK) {
-        ESP_LOGE(IMU_TAG, "I2C read reg 0x%02X failed: %d", reg, ret);
+        ESP_LOGE(IMU_TAG, "I2C read reg 0x%02X failed: %s", reg, esp_err_to_name(ret));
     }
     return ret;
 }
@@ -210,10 +230,12 @@ static void mpu6050_init_sensor(void)
     mpu6050_write_reg(MPU6050_REG_GYRO_CONFIG, 0x00);
 }
 
-static void mpu6050_read_raw(float *ax, float *ay, float *az, float *gx, float *gy, float *gz)
+static bool mpu6050_read_raw(float *ax, float *ay, float *az, float *gx, float *gy, float *gz)
 {
     uint8_t data[14];
-    mpu6050_read_regs(MPU6050_REG_ACCEL_XOUT_H, data, 14);
+    if (mpu6050_read_regs(MPU6050_REG_ACCEL_XOUT_H, data, 14) != ESP_OK) {
+        return false;
+    }
 
     *ax = (int16_t)((data[0] << 8) | data[1]) / ACCEL_SCALE;
     *ay = (int16_t)((data[2] << 8) | data[3]) / ACCEL_SCALE;
@@ -221,22 +243,28 @@ static void mpu6050_read_raw(float *ax, float *ay, float *az, float *gx, float *
     *gx = (int16_t)((data[8] << 8) | data[9]) / GYRO_SCALE;
     *gy = (int16_t)((data[10] << 8) | data[11]) / GYRO_SCALE;
     *gz = (int16_t)((data[12] << 8) | data[13]) / GYRO_SCALE;
+    return true;
 }
 
 static void mpu6050_calibrate(int samples)
 {
     float sum_ax = 0, sum_ay = 0, sum_az = 0;
     float sum_gx = 0, sum_gy = 0, sum_gz = 0;
+    int valid = 0;
 
-    for (int i = 0; i < samples; i++) {
+    while (valid < samples) {
         float ax, ay, az, gx, gy, gz;
-        mpu6050_read_raw(&ax, &ay, &az, &gx, &gy, &gz);
+        if (!mpu6050_read_raw(&ax, &ay, &az, &gx, &gy, &gz)) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
         sum_ax += ax;
         sum_ay += ay;
         sum_az += az;
         sum_gx += gx;
         sum_gy += gy;
         sum_gz += gz;
+        valid++;
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 
@@ -252,15 +280,18 @@ static void mpu6050_calibrate(int samples)
              samples, ax_off, ay_off, az_off, gx_off, gy_off, gz_off);
 }
 
-static void mpu6050_read(float *ax, float *ay, float *az, float *gx, float *gy, float *gz)
+static bool mpu6050_read(float *ax, float *ay, float *az, float *gx, float *gy, float *gz)
 {
-    mpu6050_read_raw(ax, ay, az, gx, gy, gz);
+    if (!mpu6050_read_raw(ax, ay, az, gx, gy, gz)) {
+        return false;
+    }
     *ax = *ax - ax_off;
     *ay = *ay - ay_off;
     *az = (*az - az_off) * az_scale;
     *gx = *gx - gx_off;
     *gy = *gy - gy_off;
     *gz = *gz - gz_off;
+    return true;
 }
 
 static void uart_init(void)
@@ -304,6 +335,9 @@ static void attitude_update(float ax, float ay, float az, float gx, float gy, fl
 
 static void imu_task(void *arg)
 {
+    mpu6050_init_sensor();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
     uint8_t who = mpu6050_whoami();
     ESP_LOGI(IMU_TAG, "MPU6050 WHO_AM_I: 0x%02X (expected 0x68)", who);
     if (who != 0x68) {
@@ -311,15 +345,17 @@ static void imu_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
-
-    mpu6050_init_sensor();
     mpu6050_calibrate(200);
     last_time_us = esp_timer_get_time();
 
     int seq = 0;
+    int64_t last_print_us = 0;
     while (true) {
         float ax, ay, az, gx, gy, gz;
-        mpu6050_read(&ax, &ay, &az, &gx, &gy, &gz);
+        if (!mpu6050_read(&ax, &ay, &az, &gx, &gy, &gz)) {
+            vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS));
+            continue;
+        }
 
         int64_t now = esp_timer_get_time();
         float dt = (float)(now - last_time_us) / 1000000.0f;
@@ -330,6 +366,11 @@ static void imu_task(void *arg)
         }
 
         seq++;
+        if ((now - last_print_us) < (IMU_PRINT_PERIOD_MS * 1000)) {
+            vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS));
+            continue;
+        }
+        last_print_us = now;
 
         char buf[64];
         int len = snprintf(buf, sizeof(buf), "IMU,%d,%.2f,%.2f,%.2f\n",
