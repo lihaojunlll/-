@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "driver/uart.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -29,10 +30,34 @@ void uart_link_send(const char *data, size_t len)
     uart_write_bytes(UART_PORT_NUM, data, len);
 }
 
+static void uart_link_send_packet(const char *body)
+{
+    char buf[80];
+    uint8_t crc = 0;
+    int body_len = 0;
+    while (body[body_len] != '\0') {
+        body_len++;
+    }
+    for (int i = 0; i < body_len; i++) {
+        crc ^= (uint8_t)body[i];
+    }
+    int len = snprintf(buf, sizeof(buf), "%s*%02X\n", body, crc);
+    uart_write_bytes(UART_PORT_NUM, buf, len);
+}
+
 void uart_link_send_imu(int seq, float pitch, float roll, float yaw)
 {
-    char buf[64];
-    int len = snprintf(buf, sizeof(buf), "IMU,%d,%.2f,%.2f,%.2f\n",
-                       seq, pitch, roll, yaw);
-    uart_write_bytes(UART_PORT_NUM, buf, len);
+    char body[64];
+    snprintf(body, sizeof(body), "IMU,%d,%.2f,%.2f,%.2f",
+             seq, pitch, roll, yaw);
+    uart_link_send_packet(body);
+}
+
+void uart_link_send_camera(int seq, float near_x, float far_x,
+                           float curve, float quality)
+{
+    char body[80];
+    snprintf(body, sizeof(body), "CAM,%d,%.2f,%.2f,%.2f,%.2f",
+             seq, near_x, far_x, curve, quality);
+    uart_link_send_packet(body);
 }

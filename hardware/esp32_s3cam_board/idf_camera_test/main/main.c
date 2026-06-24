@@ -9,6 +9,7 @@
 #include "nvs_flash.h"
 #include "app_config.h"
 #include "camera/camera_web.h"
+#include "camera/camera_vision.h"
 #include "imu/imu.h"
 #include "uart/uart_link.h"
 #include "wifi/wifi_ap.h"
@@ -37,7 +38,7 @@ static camera_config_t camera_config = {
     .xclk_freq_hz = 20000000,
     .ledc_timer   = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
-    .pixel_format = PIXFORMAT_JPEG,
+    .pixel_format = PIXFORMAT_RGB565,
     .frame_size   = FRAMESIZE_QVGA,
     .jpeg_quality = 12,
     .fb_count     = 2,
@@ -78,6 +79,7 @@ void app_main(void)
     ESP_LOGI(TAG, "S3-CAM starting: camera + IMU + UART");
 
     camera_web_init(&camera_config);
+    xTaskCreate(camera_vision_task, "camera_vision_task", 4096, NULL, 4, NULL);
     wifi_ap_init();
     uart_link_init();
     i2c_bus_init();

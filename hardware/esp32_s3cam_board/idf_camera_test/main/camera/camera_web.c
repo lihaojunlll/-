@@ -1,11 +1,13 @@
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "esp_camera.h"
 #include "esp_err.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "img_converters.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -43,10 +45,23 @@ static esp_err_t jpg_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
-    esp_err_t res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
+    esp_err_t res;
+    uint8_t *jpg_buf = NULL;
+    size_t jpg_len = 0;
+
+    if (fb->format == PIXFORMAT_JPEG) {
+        res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
+        jpg_len = fb->len;
+    } else if (frame2jpg(fb, 80, &jpg_buf, &jpg_len)) {
+        res = httpd_resp_send(req, (const char *)jpg_buf, jpg_len);
+        free(jpg_buf);
+    } else {
+        ESP_LOGE(TAG, "JPEG conversion failed");
+        res = httpd_resp_send_500(req);
+    }
 
     ESP_LOGI(TAG, "jpg %ux%u %u bytes %" PRId64 "ms",
-             fb->width, fb->height, fb->len,
+             fb->width, fb->height, jpg_len,
              (esp_timer_get_time() - start_us) / 1000);
     esp_camera_fb_return(fb);
     return res;
@@ -69,15 +84,30 @@ static esp_err_t stream_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
 
+        uint8_t *jpg_buf = NULL;
+        size_t jpg_len = fb->len;
+        const uint8_t *jpg_data = fb->buf;
+        if (fb->format != PIXFORMAT_JPEG) {
+            if (!frame2jpg(fb, 80, &jpg_buf, &jpg_len)) {
+                ESP_LOGE(TAG, "JPEG conversion failed");
+                esp_camera_fb_return(fb);
+                return ESP_FAIL;
+            }
+            jpg_data = jpg_buf;
+        }
+
         size_t header_len = snprintf(part_buf, sizeof(part_buf),
                                      "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n",
-                                     fb->len);
+                                     jpg_len);
         res = httpd_resp_send_chunk(req, boundary, strlen(boundary));
         if (res == ESP_OK) {
             res = httpd_resp_send_chunk(req, part_buf, header_len);
         }
         if (res == ESP_OK) {
-            res = httpd_resp_send_chunk(req, (const char *)fb->buf, fb->len);
+            res = httpd_resp_send_chunk(req, (const char *)jpg_data, jpg_len);
+        }
+        if (jpg_buf != NULL) {
+            free(jpg_buf);
         }
         esp_camera_fb_return(fb);
 

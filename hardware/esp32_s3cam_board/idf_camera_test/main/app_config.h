@@ -48,3 +48,13 @@
 #define ATTITUDE_ALPHA       0.96f
 #define CONTROL_PERIOD_MS    10
 #define IMU_PRINT_PERIOD_MS  200
+
+#define VISION_PERIOD_MS          120
+#define VISION_BLACK_Y_THRESHOLD  70
+#define VISION_SAMPLE_STEP_X      4
+#define VISION_SAMPLE_STEP_Y      4
+#define VISION_ROI_HEIGHT         28
+#define VISION_NEAR_ROW_NUM       3
+#define VISION_NEAR_ROW_DEN       4
+#define VISION_FAR_ROW_NUM        1
+#define VISION_FAR_ROW_DEN        2

@@ -17,7 +17,7 @@ NORMAL_VOLTAGE = 5.5
 MAX_MOTOR_VOLTAGE = 7.4
 
 # 普通 PID 差速修正最大幅度，单位 V。
-MAX_DIFFERENTIAL_VOLTAGE = 0.7
+MAX_DIFFERENTIAL_VOLTAGE = 0.5
 
 # 是否启用大面积黑线或垂直黑线特殊策略。
 ENABLE_INTERSECTION_STRATEGY = False
@@ -72,7 +72,7 @@ GRAY_SENSOR_ENABLED = (True, True, True, True, True)
 ADC_MAX_VOLTAGE = 3.6
 
 # 黑白判断阈值。按你的要求保持当前阈值不改。
-GRAY_THRESHOLDS = (100, 100, 100, 100, 100)
+GRAY_THRESHOLDS = (120, 100, 100, 100, 100)
 
 # False 表示 raw 大于等于阈值时判定为黑线。
 BLACK_WHEN_RAW_BELOW_THRESHOLD = False
@@ -81,9 +81,15 @@ BLACK_WHEN_RAW_BELOW_THRESHOLD = False
 SENSOR_WEIGHTS = (-2, -1, 0, 1, 2)
 
 # PID 参数。
-KP = 0.35
+KP = 0.28
 KI = 0.0
-KD = 0.12
+KD = 0.05
+
+# 直线稳定参数。位置在死区内时按直线处理，避免传感器轻微跳动导致左右扭。
+POSITION_FILTER_ALPHA = 0.55
+STRAIGHT_POSITION_DEADBAND = 0.35
+STRAIGHT_CORRECTION_DEADBAND = 0.12
+TURN_STRATEGY_THRESHOLD = 0.18
 
 # 主循环周期，单位 ms。
 CONTROL_PERIOD_MS = 40
@@ -92,7 +98,7 @@ CONTROL_PERIOD_MS = 40
 STOP_WHEN_LINE_LOST = False
 
 # 丢线后原地转弯找线电压，只在 STOP_WHEN_LINE_LOST = False 时使用。
-LOST_TURN_VOLTAGE = 5.2
+LOST_TURN_VOLTAGE = 4.6
 
 # 兼容旧名字，新代码优先使用 LOST_TURN_VOLTAGE。
 SEARCH_VOLTAGE = LOST_TURN_VOLTAGE
@@ -106,3 +112,23 @@ DEBUG_PRINT = True
 UART_RX_PIN = 22
 UART_TX_PIN = 23
 UART_BAUDRATE = 115200
+UART_TIMEOUT_MS = 500
+UART_DEBUG_PRINT = False
+
+DEBUG_PRINT_EVERY = 5
+
+# Camera feedforward. The camera should send:
+# CAM,seq,near_x,far_x,curve,quality*CRC
+# near_x/far_x/curve are normalized to [-1, 1], right is positive.
+ENABLE_CAMERA_FEEDFORWARD = False
+CAMERA_MIN_QUALITY = 0.55
+CAMERA_STRAIGHT_CURVE_THRESHOLD = 0.18
+CAMERA_STRAIGHT_SPEED_GAIN = 0.12
+CAMERA_CURVE_SLOWDOWN_GAIN = 0.28
+CAMERA_TURN_FF_GAIN = 0.55
+CAMERA_MAX_SPEED_SCALE = 1.10
+CAMERA_MIN_SPEED_SCALE = 0.72
+
+# IMU assist for camera feedforward. Keep disabled until yaw-rate damping is
+# calibrated on the real track.
+USE_IMU_ASSIST = False

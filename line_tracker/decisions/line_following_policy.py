@@ -1,5 +1,5 @@
 class LineFollowingPolicy:
-    """巡线决策：把灰度位置误差转换成左右电机电压。"""
+    """Convert line position and feedforward hints into motor voltages."""
 
     def __init__(self, position_estimator, pid_controller, left_base_voltage,
                  right_base_voltage, start_voltage, max_voltage,
@@ -12,7 +12,19 @@ class LineFollowingPolicy:
                  intersection_turn_direction="right",
                  enable_corner_strategy=False,
                  corner_turn_voltage=4.8,
-                 corner_pivot_enabled=True):
+                 corner_pivot_enabled=True,
+                 enable_camera_feedforward=False,
+                 camera_min_quality=0.55,
+                 camera_straight_curve_threshold=0.18,
+                 camera_straight_speed_gain=0.12,
+                 camera_curve_slowdown_gain=0.28,
+                 camera_turn_ff_gain=0.55,
+                 camera_max_speed_scale=1.10,
+                 camera_min_speed_scale=0.72,
+                 position_filter_alpha=0.55,
+                 straight_position_deadband=0.35,
+                 straight_correction_deadband=0.12,
+                 turn_strategy_threshold=0.18):
         self.position_estimator = position_estimator
         self.pid_controller = pid_controller
         self.left_base_voltage = left_base_voltage
@@ -30,36 +42,63 @@ class LineFollowingPolicy:
         self.enable_corner_strategy = enable_corner_strategy
         self.corner_turn_voltage = corner_turn_voltage
         self.corner_pivot_enabled = corner_pivot_enabled
+        self.enable_camera_feedforward = enable_camera_feedforward
+        self.camera_min_quality = camera_min_quality
+        self.camera_straight_curve_threshold = camera_straight_curve_threshold
+        self.camera_straight_speed_gain = camera_straight_speed_gain
+        self.camera_curve_slowdown_gain = camera_curve_slowdown_gain
+        self.camera_turn_ff_gain = camera_turn_ff_gain
+        self.camera_max_speed_scale = camera_max_speed_scale
+        self.camera_min_speed_scale = camera_min_speed_scale
+        self.position_filter_alpha = position_filter_alpha
+        self.straight_position_deadband = straight_position_deadband
+        self.straight_correction_deadband = straight_correction_deadband
+        self.turn_strategy_threshold = turn_strategy_threshold
         self.last_turn_sign = 1
+        self.last_seen_side = 1
+        self.last_black_flags = [0, 0, 1, 0, 0]
+        self.last_seen_position = 0.0
+        self.filtered_position = 0.0
 
-    def _limit_running_voltage(self, voltage):
-        if voltage <= 0:
+    def _limit_output_voltage(self, voltage):
+        if voltage == 0:
             return 0
-        if voltage < self.start_voltage:
-            return self.start_voltage
-        if voltage > self.max_voltage:
-            return self.max_voltage
-        return voltage
+
+        sign = 1 if voltage > 0 else -1
+        value = abs(voltage)
+        if value < self.start_voltage:
+            value = self.start_voltage
+        if value > self.max_voltage:
+            value = self.max_voltage
+        return sign * value
 
     def _build_decision(self, left_voltage, right_voltage, position, line_found,
-                        correction, strategy, black_count):
+                        correction, strategy, black_count, search_side=None):
+        if search_side is None:
+            search_side = self.last_seen_side
         return {
-            "left_voltage": self._limit_running_voltage(left_voltage),
-            "right_voltage": self._limit_running_voltage(right_voltage),
+            "left_voltage": self._limit_output_voltage(left_voltage),
+            "right_voltage": self._limit_output_voltage(right_voltage),
             "position": position,
             "line_found": line_found,
             "correction": correction,
             "strategy": strategy,
             "black_count": black_count,
+            "last_seen_side": self.last_seen_side,
+            "last_black_flags": self.last_black_flags,
+            "last_seen_position": self.last_seen_position,
+            "search_side": search_side,
+            "speed_scale": 1.0,
+            "turn_ff": 0.0,
+            "cam_state": "NO_CAM",
         }
 
     def _intersection_turn_sign(self):
-        direction = self.intersection_turn_direction
-        if direction == "left":
+        if self.intersection_turn_direction == "left":
             return -1
-        if direction == "right":
+        if self.intersection_turn_direction == "right":
             return 1
-        if direction == "last":
+        if self.intersection_turn_direction == "last":
             return self.last_turn_sign
         return 0
 
@@ -86,25 +125,76 @@ class LineFollowingPolicy:
             left_voltage = self.left_base_voltage + voltage * turn_sign
             right_voltage = self.right_base_voltage - voltage * turn_sign
 
-        if turn_sign > 0:
-            strategy = "SHARP_RIGHT"
-        else:
-            strategy = "SHARP_LEFT"
-
         self.last_turn_sign = turn_sign
-        return {
-            "left_voltage": left_voltage,
-            "right_voltage": right_voltage,
-            "position": position,
-            "line_found": line_found,
-            "correction": voltage * turn_sign,
-            "strategy": strategy,
-            "black_count": black_count,
-        }
+        strategy = "SHARP_RIGHT" if turn_sign > 0 else "SHARP_LEFT"
+        return self._build_decision(
+            left_voltage, right_voltage, position, line_found,
+            voltage * turn_sign, strategy, black_count
+        )
 
-    def decide(self, black_flags, dt):
+    def _camera_feedforward(self, attitude):
+        if not self.enable_camera_feedforward or not attitude:
+            return 1.0, 0.0, "NO_CAM"
+        if not attitude.get("cam_fresh", False):
+            return 1.0, 0.0, "CAM_OLD"
+
+        quality = attitude.get("cam_quality", 0.0)
+        if quality < self.camera_min_quality:
+            return 1.0, 0.0, "CAM_LOWQ"
+
+        curve = attitude.get("cam_curve", 0.0)
+        far = attitude.get("cam_far", 0.0)
+        abs_curve = abs(curve)
+
+        speed_scale = 1.0 - self.camera_curve_slowdown_gain * abs_curve
+        if abs_curve <= self.camera_straight_curve_threshold:
+            speed_scale += self.camera_straight_speed_gain
+        speed_scale = max(
+            self.camera_min_speed_scale,
+            min(self.camera_max_speed_scale, speed_scale),
+        )
+
+        turn_ff = self.camera_turn_ff_gain * (0.75 * curve + 0.25 * far)
+        if curve > self.camera_straight_curve_threshold:
+            cam_state = "CAM_RIGHT"
+        elif curve < -self.camera_straight_curve_threshold:
+            cam_state = "CAM_LEFT"
+        else:
+            cam_state = "CAM_STRAIGHT"
+        return speed_scale, turn_ff, cam_state
+
+    def _control_position(self, position):
+        alpha = self.position_filter_alpha
+        self.filtered_position = (
+            alpha * self.filtered_position + (1.0 - alpha) * position
+        )
+        if abs(self.filtered_position) <= self.straight_position_deadband:
+            return 0.0
+        return self.filtered_position
+
+    def _remember_seen_side(self, black_flags, position):
+        if not black_flags or sum(black_flags) == 0:
+            return
+        self.last_black_flags = list(black_flags)
+        self.last_seen_position = position
+
+        weighted_sum = 0
+        for flag, weight in zip(black_flags, self.position_estimator.weights):
+            weighted_sum += flag * weight
+
+        if weighted_sum < 0:
+            self.last_seen_side = -1
+            self.last_turn_sign = -1
+        elif weighted_sum > 0:
+            self.last_seen_side = 1
+            self.last_turn_sign = 1
+
+    def decide(self, black_flags, dt, attitude=None):
         black_count = sum(black_flags)
         position, line_found = self.position_estimator.estimate(black_flags)
+
+        if line_found:
+            self._remember_seen_side(black_flags, position)
 
         if self.enable_corner_strategy:
             if self._is_sharp_left_corner(black_flags):
@@ -123,29 +213,20 @@ class LineFollowingPolicy:
                     0, 0, position, line_found, 0, "LOST_STOP", black_count
                 )
 
-            if position < 0:
+            if self.last_seen_side < 0:
                 self.last_turn_sign = -1
-                return {
-                    "left_voltage": -self.search_voltage,
-                    "right_voltage": self.search_voltage,
-                    "position": position,
-                    "line_found": line_found,
-                    "correction": 0,
-                    "strategy": "LOST_SEARCH_LEFT",
-                    "black_count": black_count,
-                }
+                return self._build_decision(
+                    -self.search_voltage, self.search_voltage,
+                    position, line_found, 0, "LOST_SEARCH_LEFT", black_count,
+                    -1
+                )
             self.last_turn_sign = 1
-            return {
-                "left_voltage": self.search_voltage,
-                "right_voltage": -self.search_voltage,
-                "position": position,
-                "line_found": line_found,
-                "correction": 0,
-                "strategy": "LOST_SEARCH_RIGHT",
-                "black_count": black_count,
-            }
+            return self._build_decision(
+                self.search_voltage, -self.search_voltage,
+                position, line_found, 0, "LOST_SEARCH_RIGHT", black_count,
+                1
+            )
 
-        # 大面积黑线时，位置平均值可能接近 0，普通 PID 会误判成直行。
         if (self.enable_intersection_strategy and
                 black_count >= self.intersection_black_count):
             turn_sign = self._intersection_turn_sign()
@@ -159,33 +240,36 @@ class LineFollowingPolicy:
             return self._build_decision(
                 self.left_intersection_base_voltage + correction,
                 self.right_intersection_base_voltage - correction,
-                position,
-                line_found,
-                correction,
-                strategy,
-                black_count,
+                position, line_found, correction, strategy, black_count
             )
 
-        # 误差为正表示黑线偏右，小车需要右转：左轮更快、右轮更慢。
-        correction = self.pid_controller.update(position, dt)
-        left_voltage = self.left_base_voltage + correction
-        right_voltage = self.right_base_voltage - correction
+        speed_scale, turn_ff, cam_state = self._camera_feedforward(attitude)
+        control_position = self._control_position(position)
 
-        if correction > 0.05:
+        correction = self.pid_controller.update(control_position, dt) + turn_ff
+        if abs(correction) <= self.straight_correction_deadband:
+            correction = 0.0
+
+        left_voltage = self.left_base_voltage * speed_scale + correction
+        right_voltage = self.right_base_voltage * speed_scale - correction
+
+        if correction > self.turn_strategy_threshold:
             self.last_turn_sign = 1
             strategy = "TURN_RIGHT"
-        elif correction < -0.05:
+        elif correction < -self.turn_strategy_threshold:
             self.last_turn_sign = -1
             strategy = "TURN_LEFT"
         else:
             strategy = "GO_STRAIGHT"
 
-        return self._build_decision(
-            left_voltage,
-            right_voltage,
-            position,
-            line_found,
-            correction,
-            strategy,
-            black_count,
+        if cam_state not in ("NO_CAM", "CAM_OLD", "CAM_LOWQ"):
+            strategy = "%s+%s" % (strategy, cam_state)
+
+        decision = self._build_decision(
+            left_voltage, right_voltage, position, line_found,
+            correction, strategy, black_count
         )
+        decision["speed_scale"] = speed_scale
+        decision["turn_ff"] = turn_ff
+        decision["cam_state"] = cam_state
+        return decision

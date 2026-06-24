@@ -3,6 +3,7 @@ from algorithms.line_position import LinePositionEstimator
 from algorithms.pid import PIDController
 from applications.line_tracking_app import LineTrackingApp
 from decisions.line_following_policy import LineFollowingPolicy
+from interfaces.attitude_link import AttitudeLink
 from interfaces.gray_sensor import GraySensorArray
 from interfaces.motor_driver import DifferentialDrive, VoltageMotor
 
@@ -62,6 +63,26 @@ def build_app():
         config.ENABLE_CORNER_STRATEGY,
         config.CORNER_TURN_VOLTAGE,
         config.CORNER_PIVOT_ENABLED,
+        config.ENABLE_CAMERA_FEEDFORWARD,
+        config.CAMERA_MIN_QUALITY,
+        config.CAMERA_STRAIGHT_CURVE_THRESHOLD,
+        config.CAMERA_STRAIGHT_SPEED_GAIN,
+        config.CAMERA_CURVE_SLOWDOWN_GAIN,
+        config.CAMERA_TURN_FF_GAIN,
+        config.CAMERA_MAX_SPEED_SCALE,
+        config.CAMERA_MIN_SPEED_SCALE,
+        config.POSITION_FILTER_ALPHA,
+        config.STRAIGHT_POSITION_DEADBAND,
+        config.STRAIGHT_CORRECTION_DEADBAND,
+        config.TURN_STRATEGY_THRESHOLD,
+    )
+
+    attitude_link = AttitudeLink(
+        config.UART_RX_PIN,
+        config.UART_TX_PIN,
+        config.UART_BAUDRATE,
+        config.UART_TIMEOUT_MS,
+        config.UART_DEBUG_PRINT,
     )
 
     return LineTrackingApp(
@@ -69,10 +90,9 @@ def build_app():
         drive,
         policy,
         config.CONTROL_PERIOD_MS,
-        config.UART_RX_PIN,
-        config.UART_TX_PIN,
-        config.UART_BAUDRATE,
+        attitude_link,
         config.DEBUG_PRINT,
+        config.DEBUG_PRINT_EVERY,
     )
 
 

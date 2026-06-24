@@ -23,7 +23,7 @@ hardware/esp32_s3cam_board/idf_camera_test
 ```text
 Wi-Fi 名称: S3CAM
 Wi-Fi 密码: 12345678
-访问地址: http://192.168.4.1/
+访问地址: http://192.168.4.1/；
 ```
 
 ## 已验证摄像头引脚

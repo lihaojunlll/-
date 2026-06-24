@@ -7,6 +7,7 @@ $PythonFiles = @(
     "interfaces\__init__.py",
     "interfaces\motor_driver.py",
     "interfaces\gray_sensor.py",
+    "interfaces\attitude_link.py",
     "algorithms\__init__.py",
     "algorithms\line_position.py",
     "algorithms\pid.py",
