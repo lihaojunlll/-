@@ -19,6 +19,15 @@ MAX_MOTOR_VOLTAGE = 7.4
 # 普通 PID 差速修正最大幅度，单位 V。
 MAX_DIFFERENTIAL_VOLTAGE = 0.5
 
+# 是否启用圆形弯道策略。检测到全黑（5路均黑）时切换标志位，
+# 第二次全黑时退出。圆形弯道模式下限制差速幅度。
+ENABLE_CIRCULAR_CURVE_STRATEGY = True
+MAX_DIFFERENTIAL_VOLTAGE_CIRCULAR = 0.50  # 圆形弯道内最大差速 V
+CIRCULAR_CURVE_FEEDFORWARD = 0.30  # 圆形弯道内固定前馈电压 V
+CIRCULAR_CURVE_EXIT_COUNT = 30  # 进入圆形弯道后经过多少次判断才允许退出
+CIRCULAR_CURVE_ENTER_COUNT = 5  # 检测到全黑后经过多少次判断才允许进入
+CIRCULAR_CURVE_EXIT_BLACK_COUNT = 3  # 退出所需传感器黑路数 (≥3路黑)
+
 # 是否启用大面积黑线或垂直黑线特殊策略。
 ENABLE_INTERSECTION_STRATEGY = False
 

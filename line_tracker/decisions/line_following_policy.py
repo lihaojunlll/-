@@ -13,6 +13,12 @@ class LineFollowingPolicy:
                  enable_corner_strategy=False,
                  corner_turn_voltage=4.8,
                  corner_pivot_enabled=True,
+                 enable_circular_curve_strategy=False,
+                 max_differential_voltage_circular=0.18,
+                 circular_curve_feedforward=0.30,
+                 circular_curve_exit_count=10,
+                 circular_curve_exit_black_count=3,
+                 circular_curve_enter_count=5,
                  enable_camera_feedforward=False,
                  camera_min_quality=0.55,
                  camera_straight_curve_threshold=0.18,
@@ -42,6 +48,15 @@ class LineFollowingPolicy:
         self.enable_corner_strategy = enable_corner_strategy
         self.corner_turn_voltage = corner_turn_voltage
         self.corner_pivot_enabled = corner_pivot_enabled
+        self.enable_circular_curve_strategy = enable_circular_curve_strategy
+        self.max_differential_voltage_circular = max_differential_voltage_circular
+        self.circular_curve_feedforward = circular_curve_feedforward
+        self.circular_curve_exit_count = circular_curve_exit_count
+        self.circular_curve_exit_black_count = circular_curve_exit_black_count
+        self.circular_curve_enter_count = circular_curve_enter_count
+        self.in_circular_curve = False
+        self._circular_counter = 0
+        self._exit_cooldown = self.circular_curve_enter_count
         self.enable_camera_feedforward = enable_camera_feedforward
         self.camera_min_quality = camera_min_quality
         self.camera_straight_curve_threshold = camera_straight_curve_threshold
@@ -91,6 +106,8 @@ class LineFollowingPolicy:
             "speed_scale": 1.0,
             "turn_ff": 0.0,
             "cam_state": "NO_CAM",
+            "in_circular_curve": self.in_circular_curve,
+            "circ_counter": self._circular_counter,
         }
 
     def _intersection_turn_sign(self):
@@ -189,9 +206,32 @@ class LineFollowingPolicy:
             self.last_seen_side = 1
             self.last_turn_sign = 1
 
+    def _is_all_black(self, black_flags):
+        return black_flags == [1, 1, 1, 1, 1]
+
     def decide(self, black_flags, dt, attitude=None):
         black_count = sum(black_flags)
         position, line_found = self.position_estimator.estimate(black_flags)
+
+        if self.enable_circular_curve_strategy:
+            if self.in_circular_curve:
+                self._circular_counter += 1
+                if self._is_all_black(black_flags):
+                    if self._circular_counter >= self.circular_curve_exit_count:
+                        self.in_circular_curve = False
+                        self._circular_counter = 0
+                        self._exit_cooldown = 0
+                elif black_count >= self.circular_curve_exit_black_count:
+                    if self._circular_counter >= self.circular_curve_exit_count:
+                        self.in_circular_curve = False
+                        self._circular_counter = 0
+                        self._exit_cooldown = 0
+            else:
+                self._exit_cooldown += 1
+                if self._is_all_black(black_flags) and self._exit_cooldown >= self.circular_curve_enter_count:
+                    self.in_circular_curve = True
+                    self._circular_counter = 0
+                    self.pid_controller.reset()
 
         if line_found:
             self._remember_seen_side(black_flags, position)
@@ -247,6 +287,12 @@ class LineFollowingPolicy:
         control_position = self._control_position(position)
 
         correction = self.pid_controller.update(control_position, dt) + turn_ff
+        if self.in_circular_curve:
+            correction += self.circular_curve_feedforward * self.last_turn_sign
+            if correction > self.max_differential_voltage_circular:
+                correction = self.max_differential_voltage_circular
+            elif correction < -self.max_differential_voltage_circular:
+                correction = -self.max_differential_voltage_circular
         if abs(correction) <= self.straight_correction_deadband:
             correction = 0.0
 

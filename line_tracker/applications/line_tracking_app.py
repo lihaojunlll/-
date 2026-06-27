@@ -68,7 +68,7 @@ class LineTrackingApp:
                     print(
                         "raw={} black={} count={} pos={:.2f} found={} "
                         "strategy={} last={} search={} last_flags={} last_pos={:.2f} "
-                        "diff={:.2f}V ff={:.2f} scale={:.2f} "
+                        "diff={:.2f}V ff={:.2f} scale={:.2f} circ={}/{} "
                         "left={:.2f}V right={:.2f}V "
                         "{}".format(
                             raw_values,
@@ -84,6 +84,8 @@ class LineTrackingApp:
                             decision["correction"],
                             decision.get("turn_ff", 0.0),
                             decision.get("speed_scale", 1.0),
+                            int(decision.get("in_circular_curve", False)),
+                            decision.get("circ_counter", 0),
                             left_voltage,
                             right_voltage,
                             imu_text,
