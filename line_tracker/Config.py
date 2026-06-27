@@ -7,23 +7,26 @@ SUPPLY_VOLTAGE = 7.4
 MOTOR_START_VOLTAGE = 4.07
 
 # 左右轮正常巡线基础电压，单位 V。
-LEFT_BASE_VOLTAGE = 5.5
-RIGHT_BASE_VOLTAGE = 5.5
+LEFT_BASE_VOLTAGE = 6.0
+RIGHT_BASE_VOLTAGE = 6.0
 
 # 兼容旧名字，新代码优先使用 LEFT_BASE_VOLTAGE / RIGHT_BASE_VOLTAGE。
-NORMAL_VOLTAGE = 5.5
+NORMAL_VOLTAGE = 6
 
 # 允许输出到电机的最大等效电压，单位 V。
 MAX_MOTOR_VOLTAGE = 7.4
 
 # 普通 PID 差速修正最大幅度，单位 V。
-MAX_DIFFERENTIAL_VOLTAGE = 0.5
+MAX_DIFFERENTIAL_VOLTAGE = 3.0
+# 圆形弯道独立 PID 参数（更激进）。
+KP_CIRCULAR = 0.8
+KI_CIRCULAR = 0.0
+KD_CIRCULAR = 0.03
+MAX_DIFFERENTIAL_VOLTAGE_CIRCULAR = 1.0  # 圆形弯道内差速限幅
 
 # 是否启用圆形弯道策略。检测到全黑（5路均黑）时切换标志位，
-# 第二次全黑时退出。圆形弯道模式下限制差速幅度。
-ENABLE_CIRCULAR_CURVE_STRATEGY = True
-MAX_DIFFERENTIAL_VOLTAGE_CIRCULAR = 0.50  # 圆形弯道内最大差速 V
-CIRCULAR_CURVE_FEEDFORWARD = 0.30  # 圆形弯道内固定前馈电压 V
+# 第二次全黑时退出。
+ENABLE_CIRCULAR_CURVE_STRATEGY = False
 CIRCULAR_CURVE_EXIT_COUNT = 30  # 进入圆形弯道后经过多少次判断才允许退出
 CIRCULAR_CURVE_ENTER_COUNT = 5  # 检测到全黑后经过多少次判断才允许进入
 CIRCULAR_CURVE_EXIT_BLACK_COUNT = 3  # 退出所需传感器黑路数 (≥3路黑)
@@ -51,7 +54,7 @@ INTERSECTION_TURN_DIRECTION = "right"
 ENABLE_CORNER_STRATEGY = True
 
 # 当最外侧传感器或同侧多个传感器连续吃线时，使用更激进的转向电压。
-CORNER_TURN_VOLTAGE = 4.8
+CORNER_TURN_VOLTAGE = 7
 
 # 直角弯时是否使用原地差速转向。True 表示一侧前进一侧后退。
 CORNER_PIVOT_ENABLED = True
@@ -87,33 +90,59 @@ GRAY_THRESHOLDS = (120, 100, 100, 100, 100)
 BLACK_WHEN_RAW_BELOW_THRESHOLD = False
 
 # 灰度传感器位置权重，左负右正。
-SENSOR_WEIGHTS = (-2, -1, 0, 1, 2)
+SENSOR_WEIGHTS = (-3, -0.5, 0, 0.5, 3)
 
 # PID 参数。
-KP = 0.28
-KI = 0.0
-KD = 0.05
+KP = 1.6
+KI = 0.2
+KD = 0.1
 
 # 直线稳定参数。位置在死区内时按直线处理，避免传感器轻微跳动导致左右扭。
 POSITION_FILTER_ALPHA = 0.55
-STRAIGHT_POSITION_DEADBAND = 0.35
-STRAIGHT_CORRECTION_DEADBAND = 0.12
+ENABLE_POSITION_FILTER = False  # False 则关闭低通滤波，直接使用原始位置
+VOLTAGE_FILTER_ALPHA = 0.0    # 输出电压低通滤波（越大越平滑）
+STRAIGHT_POSITION_DEADBAND = 0.30  # 只有00100直走
+# 圆形弯道内死区（硬阈值：≤死区 error=0，不做减法）。
+STRAIGHT_POSITION_DEADBAND_CIRCULAR = 0.35
+STRAIGHT_CORRECTION_DEADBAND = 0
 TURN_STRATEGY_THRESHOLD = 0.18
 
 # 主循环周期，单位 ms。
-CONTROL_PERIOD_MS = 40
+CONTROL_PERIOD_MS = 8
 
 # 丢线后的处理方式。直角弯时不停车，按上一次方向找线。
 STOP_WHEN_LINE_LOST = False
 
 # 丢线后原地转弯找线电压，只在 STOP_WHEN_LINE_LOST = False 时使用。
-LOST_TURN_VOLTAGE = 4.6
+LOST_TURN_VOLTAGE = 5.0
 
 # 兼容旧名字，新代码优先使用 LOST_TURN_VOLTAGE。
 SEARCH_VOLTAGE = LOST_TURN_VOLTAGE
 
 # 是否打印调试信息。
 DEBUG_PRINT = True
+
+# BLE 蓝牙调试开关与设备名。移动端用 "Serial Bluetooth Terminal"
+# 或 nRF Connect 连接 CAR-DEBUG 即可查看串口调试数据。
+BLE_DEBUG_ENABLED = True
+BLE_DEVICE_NAME = "CAR-DEBUG"
+
+# WiFi 无线部署（WebREPL）。首次需用 USB 烧录一次，配置好 WiFi，
+# 之后即可用 wireless_deploy.ps1 无线烧录，无需数据线。
+# 留空字符串则跳过 WiFi 连接。
+WIFI_SSID = ""
+WIFI_PASSWORD = ""
+# WebREPL 访问密码（6-8字符），无线部署和查看日志用。
+WEBREPL_PASSWORD = "12345678"
+# 设置静态 IP（可选），四项全填则使用静态 IP，否则用 DHCP。
+# 格式: IP, 子网掩码, 网关, DNS
+WIFI_STATIC_IP = "10.148.233.100"
+WIFI_STATIC_MASK = "255.255.255.0"
+WIFI_STATIC_GW = "10.148.233.31"
+WIFI_STATIC_DNS = "10.148.233.31"
+# mDNS 主机名，在电脑浏览器访问 http://car-tracker.local 或
+# 无线烧录用 ws://car-tracker.local:8266/（需电脑支持 mDNS）
+WIFI_HOSTNAME = "car-tracker"
 
 # UART 接收 S3CAM 姿态数据。
 # RX=GPIO22 <- S3CAM TX=GPIO45
@@ -123,8 +152,6 @@ UART_TX_PIN = 23
 UART_BAUDRATE = 115200
 UART_TIMEOUT_MS = 500
 UART_DEBUG_PRINT = False
-
-DEBUG_PRINT_EVERY = 5
 
 # Camera feedforward. The camera should send:
 # CAM,seq,near_x,far_x,curve,quality*CRC

@@ -5,15 +5,15 @@ class LineTrackingApp:
     """正式寻迹应用主循环。"""
 
     def __init__(self, sensors, drive, policy, control_period_ms,
-                 attitude_link, debug_print=True, debug_print_every=1):
+                 attitude_link, debug_print=True,
+                 ble_debug=None):
         self.sensors = sensors
         self.drive = drive
         self.policy = policy
         self.control_period_ms = control_period_ms
         self.debug_print = debug_print
         self.attitude_link = attitude_link
-        self.debug_counter = 0
-        self.debug_print_every = max(1, debug_print_every)
+        self.ble_debug = ble_debug
 
     def run(self):
         print("Line tracking app started.")
@@ -37,60 +37,40 @@ class LineTrackingApp:
                 right_voltage = decision["right_voltage"]
                 self.drive.set_voltage(left_voltage, right_voltage)
 
-                self.debug_counter += 1
-                if (self.debug_print and
-                        self.debug_counter % self.debug_print_every == 0):
-                    imu_text = "imu=none"
-                    last_side = "L" if decision.get("last_seen_side", 0) < 0 else "R"
-                    search_side = "L" if decision.get("search_side", 0) < 0 else "R"
-                    last_flags = decision.get("last_black_flags", [])
-                    if attitude:
-                        imu_text = (
-                            "imu=%d,%d,%.1f,%.1f,%.1f "
-                            "cam=%d,%d,%.2f,%.2f,%.2f,%.2f "
-                            "lost=%d,%d,bad=%d"
-                        ) % (
-                            1 if attitude["fresh"] else 0,
-                            attitude["seq"],
-                            attitude["pitch"],
-                            attitude["roll"],
-                            attitude["yaw"],
-                            1 if attitude["cam_fresh"] else 0,
-                            attitude["cam_seq"],
-                            attitude["cam_near"],
-                            attitude["cam_far"],
-                            attitude["cam_curve"],
-                            attitude["cam_quality"],
-                            attitude["lost_packets"],
-                            attitude["cam_lost_packets"],
-                            attitude["bad_packets"],
-                        )
-                    print(
-                        "raw={} black={} count={} pos={:.2f} found={} "
-                        "strategy={} last={} search={} last_flags={} last_pos={:.2f} "
-                        "diff={:.2f}V ff={:.2f} scale={:.2f} circ={}/{} "
+                if self.debug_print:
+                    debug_line = (
+                        "raw={} black={} count={} pos={:.2f} fpos={:.2f} "
+                        "dt={:.3f} err={:.2f} found={} strategy={} last={} search={} "
+                        "last_flags={} last_pos={:.2f} "
+                        "diff={:.2f}V P={:.2f} I={:.2f} D={:.2f} "
                         "left={:.2f}V right={:.2f}V "
-                        "{}".format(
+                        "circ={}/{}".format(
                             raw_values,
                             black_flags,
                             decision["black_count"],
                             decision["position"],
+                            self.policy.filtered_position,
+                            dt,
+                            decision.get("error", 0.0),
                             1 if decision["line_found"] else 0,
                             decision["strategy"],
-                            last_side,
-                            search_side,
-                            last_flags,
+                            "L" if decision.get("last_seen_side", 0) < 0 else "R",
+                            "L" if decision.get("search_side", 0) < 0 else "R",
+                            decision.get("last_black_flags", []),
                             decision.get("last_seen_position", 0.0),
                             decision["correction"],
-                            decision.get("turn_ff", 0.0),
-                            decision.get("speed_scale", 1.0),
-                            int(decision.get("in_circular_curve", False)),
-                            decision.get("circ_counter", 0),
+                            decision.get("p_term", 0.0),
+                            decision.get("i_term", 0.0),
+                            decision.get("d_term", 0.0),
                             left_voltage,
                             right_voltage,
-                            imu_text,
+                            int(decision.get("in_circular_curve", False)),
+                            decision.get("circ_counter", 0),
                         )
                     )
+                    print(debug_line)
+                    if self.ble_debug:
+                        self.ble_debug.send(debug_line)
 
                 time.sleep_ms(self.control_period_ms)
         except KeyboardInterrupt:

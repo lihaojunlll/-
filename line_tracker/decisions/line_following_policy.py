@@ -1,7 +1,8 @@
 class LineFollowingPolicy:
     """Convert line position and feedforward hints into motor voltages."""
 
-    def __init__(self, position_estimator, pid_controller, left_base_voltage,
+    def __init__(self, position_estimator, pid_controller, pid_circular,
+                 left_base_voltage,
                  right_base_voltage, start_voltage, max_voltage,
                  stop_when_lost=True, search_voltage=4.3,
                  enable_intersection_strategy=False,
@@ -13,10 +14,8 @@ class LineFollowingPolicy:
                  enable_corner_strategy=False,
                  corner_turn_voltage=4.8,
                  corner_pivot_enabled=True,
-                 enable_circular_curve_strategy=False,
-                 max_differential_voltage_circular=0.18,
-                 circular_curve_feedforward=0.30,
-                 circular_curve_exit_count=10,
+                  enable_circular_curve_strategy=False,
+                  circular_curve_exit_count=10,
                  circular_curve_exit_black_count=3,
                  circular_curve_enter_count=5,
                  enable_camera_feedforward=False,
@@ -27,12 +26,16 @@ class LineFollowingPolicy:
                  camera_turn_ff_gain=0.55,
                  camera_max_speed_scale=1.10,
                  camera_min_speed_scale=0.72,
-                 position_filter_alpha=0.55,
-                 straight_position_deadband=0.35,
-                 straight_correction_deadband=0.12,
-                 turn_strategy_threshold=0.18):
+                  position_filter_alpha=0.55,
+                  enable_position_filter=True,
+                  straight_position_deadband=0.35,
+                  straight_deadband_circular=0.60,
+                  straight_correction_deadband=0.12,
+                  turn_strategy_threshold=0.18,
+                  voltage_filter_alpha=0.60):
         self.position_estimator = position_estimator
         self.pid_controller = pid_controller
+        self.pid_circular = pid_circular
         self.left_base_voltage = left_base_voltage
         self.right_base_voltage = right_base_voltage
         self.start_voltage = start_voltage
@@ -49,8 +52,6 @@ class LineFollowingPolicy:
         self.corner_turn_voltage = corner_turn_voltage
         self.corner_pivot_enabled = corner_pivot_enabled
         self.enable_circular_curve_strategy = enable_circular_curve_strategy
-        self.max_differential_voltage_circular = max_differential_voltage_circular
-        self.circular_curve_feedforward = circular_curve_feedforward
         self.circular_curve_exit_count = circular_curve_exit_count
         self.circular_curve_exit_black_count = circular_curve_exit_black_count
         self.circular_curve_enter_count = circular_curve_enter_count
@@ -66,9 +67,14 @@ class LineFollowingPolicy:
         self.camera_max_speed_scale = camera_max_speed_scale
         self.camera_min_speed_scale = camera_min_speed_scale
         self.position_filter_alpha = position_filter_alpha
+        self.enable_position_filter = enable_position_filter
         self.straight_position_deadband = straight_position_deadband
+        self.straight_deadband_circular = straight_deadband_circular
         self.straight_correction_deadband = straight_correction_deadband
         self.turn_strategy_threshold = turn_strategy_threshold
+        self.voltage_filter_alpha = voltage_filter_alpha
+        self.filtered_left = 0.0
+        self.filtered_right = 0.0
         self.last_turn_sign = 1
         self.last_seen_side = 1
         self.last_black_flags = [0, 0, 1, 0, 0]
@@ -106,8 +112,9 @@ class LineFollowingPolicy:
             "speed_scale": 1.0,
             "turn_ff": 0.0,
             "cam_state": "NO_CAM",
-            "in_circular_curve": self.in_circular_curve,
+             "in_circular_curve": self.in_circular_curve,
             "circ_counter": self._circular_counter,
+            "error": self.filtered_position,
         }
 
     def _intersection_turn_sign(self):
@@ -121,14 +128,12 @@ class LineFollowingPolicy:
 
     def _is_sharp_left_corner(self, black_flags):
         return black_flags in (
-            [1, 0, 0, 0, 0],
             [1, 1, 0, 0, 0],
             [1, 1, 1, 0, 0],
         )
 
     def _is_sharp_right_corner(self, black_flags):
         return black_flags in (
-            [0, 0, 0, 0, 1],
             [0, 0, 0, 1, 1],
             [0, 0, 1, 1, 1],
         )
@@ -181,11 +186,17 @@ class LineFollowingPolicy:
         return speed_scale, turn_ff, cam_state
 
     def _control_position(self, position):
-        alpha = self.position_filter_alpha
-        self.filtered_position = (
-            alpha * self.filtered_position + (1.0 - alpha) * position
-        )
-        if abs(self.filtered_position) <= self.straight_position_deadband:
+        if self.enable_position_filter:
+            alpha = self.position_filter_alpha
+            self.filtered_position = (
+                alpha * self.filtered_position + (1.0 - alpha) * position
+            )
+        else:
+            self.filtered_position = position
+
+        deadband = (self.straight_deadband_circular if self.in_circular_curve
+                    else self.straight_position_deadband)
+        if abs(self.filtered_position) <= deadband:
             return 0.0
         return self.filtered_position
 
@@ -212,6 +223,7 @@ class LineFollowingPolicy:
     def decide(self, black_flags, dt, attitude=None):
         black_count = sum(black_flags)
         position, line_found = self.position_estimator.estimate(black_flags)
+        control_position = self._control_position(position)
 
         if self.enable_circular_curve_strategy:
             if self.in_circular_curve:
@@ -231,17 +243,17 @@ class LineFollowingPolicy:
                 if self._is_all_black(black_flags) and self._exit_cooldown >= self.circular_curve_enter_count:
                     self.in_circular_curve = True
                     self._circular_counter = 0
-                    self.pid_controller.reset()
+                    self.pid_circular.reset()
 
         if line_found:
             self._remember_seen_side(black_flags, position)
 
         if self.enable_corner_strategy:
-            if self._is_sharp_left_corner(black_flags):
+            if self._is_sharp_left_corner(black_flags) and self.last_seen_side < 0:
                 return self._build_corner_decision(
                     -1, position, line_found, black_count
                 )
-            if self._is_sharp_right_corner(black_flags):
+            if self._is_sharp_right_corner(black_flags) and self.last_seen_side > 0:
                 return self._build_corner_decision(
                     1, position, line_found, black_count
                 )
@@ -284,20 +296,24 @@ class LineFollowingPolicy:
             )
 
         speed_scale, turn_ff, cam_state = self._camera_feedforward(attitude)
-        control_position = self._control_position(position)
 
-        correction = self.pid_controller.update(control_position, dt) + turn_ff
-        if self.in_circular_curve:
-            correction += self.circular_curve_feedforward * self.last_turn_sign
-            if correction > self.max_differential_voltage_circular:
-                correction = self.max_differential_voltage_circular
-            elif correction < -self.max_differential_voltage_circular:
-                correction = -self.max_differential_voltage_circular
+        pid = self.pid_circular if self.in_circular_curve else self.pid_controller
+        correction = pid.update(control_position, dt) + turn_ff
         if abs(correction) <= self.straight_correction_deadband:
             correction = 0.0
 
-        left_voltage = self.left_base_voltage * speed_scale + correction
-        right_voltage = self.right_base_voltage * speed_scale - correction
+        left_voltage = self.left_base_voltage * speed_scale
+        right_voltage = self.right_base_voltage * speed_scale
+        if correction > 0:
+            left_voltage += correction
+        else:
+            right_voltage -= correction
+
+        alpha = self.voltage_filter_alpha
+        self.filtered_left = alpha * self.filtered_left + (1 - alpha) * left_voltage
+        self.filtered_right = alpha * self.filtered_right + (1 - alpha) * right_voltage
+        left_voltage = self.filtered_left
+        right_voltage = self.filtered_right
 
         if correction > self.turn_strategy_threshold:
             self.last_turn_sign = 1
@@ -318,4 +334,8 @@ class LineFollowingPolicy:
         decision["speed_scale"] = speed_scale
         decision["turn_ff"] = turn_ff
         decision["cam_state"] = cam_state
+        decision["error"] = control_position
+        decision["p_term"] = pid.p_term
+        decision["i_term"] = pid.i_term
+        decision["d_term"] = pid.d_term
         return decision

@@ -24,6 +24,8 @@ Write-Host "Uploading line tracking project to ESP32 on $Port..."
 & mpremote connect $Port cp (Join-Path $ProjectDir "interfaces\motor_driver.py") :interfaces/motor_driver.py
 & mpremote connect $Port cp (Join-Path $ProjectDir "interfaces\gray_sensor.py") :interfaces/gray_sensor.py
 & mpremote connect $Port cp (Join-Path $ProjectDir "interfaces\attitude_link.py") :interfaces/attitude_link.py
+& mpremote connect $Port cp (Join-Path $ProjectDir "interfaces\ble_debug.py") :interfaces/ble_debug.py
+& mpremote connect $Port cp (Join-Path $ProjectDir "interfaces\wifi_setup.py") :interfaces/wifi_setup.py
 
 & mpremote connect $Port cp (Join-Path $ProjectDir "algorithms\__init__.py") :algorithms/__init__.py
 & mpremote connect $Port cp (Join-Path $ProjectDir "algorithms\line_position.py") :algorithms/line_position.py

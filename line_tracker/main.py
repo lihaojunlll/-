@@ -4,8 +4,10 @@ from algorithms.pid import PIDController
 from applications.line_tracking_app import LineTrackingApp
 from decisions.line_following_policy import LineFollowingPolicy
 from interfaces.attitude_link import AttitudeLink
+from interfaces.ble_debug import BLEDebug
 from interfaces.gray_sensor import GraySensorArray
 from interfaces.motor_driver import DifferentialDrive, VoltageMotor
+from interfaces.wifi_setup import connect as wifi_connect, start_webrepl
 
 
 def build_app():
@@ -45,9 +47,16 @@ def build_app():
         config.KD,
         config.MAX_DIFFERENTIAL_VOLTAGE,
     )
+    pid_circular = PIDController(
+        config.KP_CIRCULAR,
+        config.KI_CIRCULAR,
+        config.KD_CIRCULAR,
+        config.MAX_DIFFERENTIAL_VOLTAGE_CIRCULAR,
+    )
     policy = LineFollowingPolicy(
         position_estimator,
         pid_controller,
+        pid_circular,
         config.LEFT_BASE_VOLTAGE,
         config.RIGHT_BASE_VOLTAGE,
         config.MOTOR_START_VOLTAGE,
@@ -64,8 +73,6 @@ def build_app():
         config.CORNER_TURN_VOLTAGE,
         config.CORNER_PIVOT_ENABLED,
         config.ENABLE_CIRCULAR_CURVE_STRATEGY,
-        config.MAX_DIFFERENTIAL_VOLTAGE_CIRCULAR,
-        config.CIRCULAR_CURVE_FEEDFORWARD,
         config.CIRCULAR_CURVE_EXIT_COUNT,
         config.CIRCULAR_CURVE_EXIT_BLACK_COUNT,
         config.CIRCULAR_CURVE_ENTER_COUNT,
@@ -78,17 +85,24 @@ def build_app():
         config.CAMERA_MAX_SPEED_SCALE,
         config.CAMERA_MIN_SPEED_SCALE,
         config.POSITION_FILTER_ALPHA,
+        config.ENABLE_POSITION_FILTER,
         config.STRAIGHT_POSITION_DEADBAND,
+        config.STRAIGHT_POSITION_DEADBAND_CIRCULAR,
         config.STRAIGHT_CORRECTION_DEADBAND,
         config.TURN_STRATEGY_THRESHOLD,
+        config.VOLTAGE_FILTER_ALPHA,
     )
-
     attitude_link = AttitudeLink(
         config.UART_RX_PIN,
         config.UART_TX_PIN,
         config.UART_BAUDRATE,
         config.UART_TIMEOUT_MS,
         config.UART_DEBUG_PRINT,
+    )
+
+    ble_debug = BLEDebug(
+        name=config.BLE_DEVICE_NAME,
+        enabled=config.BLE_DEBUG_ENABLED,
     )
 
     return LineTrackingApp(
@@ -98,13 +112,24 @@ def build_app():
         config.CONTROL_PERIOD_MS,
         attitude_link,
         config.DEBUG_PRINT,
-        config.DEBUG_PRINT_EVERY,
+        ble_debug,
     )
 
 
 def main():
     """烧录入口函数。"""
     print("main.py started.")
+
+    wifi_connect(
+        config.WIFI_SSID, config.WIFI_PASSWORD,
+        hostname=config.WIFI_HOSTNAME,
+        static_ip=config.WIFI_STATIC_IP,
+        static_mask=config.WIFI_STATIC_MASK,
+        static_gw=config.WIFI_STATIC_GW,
+        static_dns=config.WIFI_STATIC_DNS,
+    )
+    start_webrepl(config.WEBREPL_PASSWORD)
+
     try:
         app = build_app()
         app.run()
