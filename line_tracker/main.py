@@ -91,6 +91,7 @@ def build_app():
         config.STRAIGHT_CORRECTION_DEADBAND,
         config.TURN_STRATEGY_THRESHOLD,
         config.VOLTAGE_FILTER_ALPHA,
+        config.BRAKE_MAX_VOLTAGE,
     )
     attitude_link = AttitudeLink(
         config.UART_RX_PIN,

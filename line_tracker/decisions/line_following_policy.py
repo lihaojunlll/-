@@ -30,9 +30,10 @@ class LineFollowingPolicy:
                   enable_position_filter=True,
                   straight_position_deadband=0.35,
                   straight_deadband_circular=0.60,
-                  straight_correction_deadband=0.12,
-                  turn_strategy_threshold=0.18,
-                  voltage_filter_alpha=0.60):
+                   straight_correction_deadband=0.12,
+                   turn_strategy_threshold=0.18,
+                   voltage_filter_alpha=0.60,
+                   brake_max_voltage=1.0):
         self.position_estimator = position_estimator
         self.pid_controller = pid_controller
         self.pid_circular = pid_circular
@@ -73,6 +74,7 @@ class LineFollowingPolicy:
         self.straight_correction_deadband = straight_correction_deadband
         self.turn_strategy_threshold = turn_strategy_threshold
         self.voltage_filter_alpha = voltage_filter_alpha
+        self.brake_max_voltage = brake_max_voltage
         self.filtered_left = 0.0
         self.filtered_right = 0.0
         self.last_turn_sign = 1
@@ -306,8 +308,10 @@ class LineFollowingPolicy:
         right_voltage = self.right_base_voltage * speed_scale
         if correction > 0:
             left_voltage += correction
+            right_voltage -= min(correction, self.brake_max_voltage)
         else:
             right_voltage -= correction
+            left_voltage -= min(abs(correction), self.brake_max_voltage)
 
         alpha = self.voltage_filter_alpha
         self.filtered_left = alpha * self.filtered_left + (1 - alpha) * left_voltage

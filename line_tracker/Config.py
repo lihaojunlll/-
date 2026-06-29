@@ -7,17 +7,19 @@ SUPPLY_VOLTAGE = 7.4
 MOTOR_START_VOLTAGE = 4.07
 
 # 左右轮正常巡线基础电压，单位 V。
-LEFT_BASE_VOLTAGE = 6.0
-RIGHT_BASE_VOLTAGE = 6.0
+LEFT_BASE_VOLTAGE = 5.0
+RIGHT_BASE_VOLTAGE = 5.0
 
 # 兼容旧名字，新代码优先使用 LEFT_BASE_VOLTAGE / RIGHT_BASE_VOLTAGE。
-NORMAL_VOLTAGE = 6
+NORMAL_VOLTAGE = 5.2
 
 # 允许输出到电机的最大等效电压，单位 V。
 MAX_MOTOR_VOLTAGE = 7.4
 
 # 普通 PID 差速修正最大幅度，单位 V。
 MAX_DIFFERENTIAL_VOLTAGE = 3.0
+
+
 # 圆形弯道独立 PID 参数（更激进）。
 KP_CIRCULAR = 0.8
 KI_CIRCULAR = 0.0
@@ -90,18 +92,21 @@ GRAY_THRESHOLDS = (120, 100, 100, 100, 100)
 BLACK_WHEN_RAW_BELOW_THRESHOLD = False
 
 # 灰度传感器位置权重，左负右正。
-SENSOR_WEIGHTS = (-3, -0.5, 0, 0.5, 3)
+SENSOR_WEIGHTS = (-2.0, -1.2, 0, 1.2, 2.0)
 
+
+# 转弯时对侧轮减速的最大幅度，单位 V。0 则只加速不减速（原行为）。
+BRAKE_MAX_VOLTAGE = 1.0
 # PID 参数。
-KP = 1.6
+KP = 0.5
 KI = 0.2
-KD = 0.1
+KD = 0.05
 
 # 直线稳定参数。位置在死区内时按直线处理，避免传感器轻微跳动导致左右扭。
 POSITION_FILTER_ALPHA = 0.55
 ENABLE_POSITION_FILTER = False  # False 则关闭低通滤波，直接使用原始位置
 VOLTAGE_FILTER_ALPHA = 0.0    # 输出电压低通滤波（越大越平滑）
-STRAIGHT_POSITION_DEADBAND = 0.30  # 只有00100直走
+STRAIGHT_POSITION_DEADBAND = 0.0  # 只有00100直走
 # 圆形弯道内死区（硬阈值：≤死区 error=0，不做减法）。
 STRAIGHT_POSITION_DEADBAND_CIRCULAR = 0.35
 STRAIGHT_CORRECTION_DEADBAND = 0
@@ -114,7 +119,7 @@ CONTROL_PERIOD_MS = 8
 STOP_WHEN_LINE_LOST = False
 
 # 丢线后原地转弯找线电压，只在 STOP_WHEN_LINE_LOST = False 时使用。
-LOST_TURN_VOLTAGE = 5.0
+LOST_TURN_VOLTAGE = 4.6
 
 # 兼容旧名字，新代码优先使用 LOST_TURN_VOLTAGE。
 SEARCH_VOLTAGE = LOST_TURN_VOLTAGE
