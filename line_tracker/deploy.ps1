@@ -12,12 +12,19 @@ if (-not (Get-Command mpremote -ErrorAction SilentlyContinue)) {
 
 Write-Host "Uploading line tracking project to ESP32 on $Port..."
 
+Write-Host "Trying to remove old main.py first..."
+try {
+    $script = "import os`nexec('try:' + chr(10) + '    os.remove(chr(47) + chr(109) + chr(97) + chr(105) + chr(110) + chr(46) + chr(112) + chr(121))' + chr(10) + 'except:' + chr(10) + '    pass')"
+    & mpremote connect $Port exec "try: import os; os.remove('/main.py')\nexcept: pass" 2>$null
+} catch {
+    Write-Host "  (main.py not present or already clean, continuing...)"
+}
+
 & mpremote connect $Port mkdir :interfaces
 & mpremote connect $Port mkdir :algorithms
 & mpremote connect $Port mkdir :decisions
 & mpremote connect $Port mkdir :applications
 
-& mpremote connect $Port cp (Join-Path $ProjectDir "main.py") :main.py
 & mpremote connect $Port cp (Join-Path $ProjectDir "config.py") :config.py
 
 & mpremote connect $Port cp (Join-Path $ProjectDir "interfaces\__init__.py") :interfaces/__init__.py
@@ -36,6 +43,9 @@ Write-Host "Uploading line tracking project to ESP32 on $Port..."
 
 & mpremote connect $Port cp (Join-Path $ProjectDir "applications\__init__.py") :applications/__init__.py
 & mpremote connect $Port cp (Join-Path $ProjectDir "applications\line_tracking_app.py") :applications/line_tracking_app.py
+
+# main.py must be uploaded last to avoid crash blocking subsequent uploads
+& mpremote connect $Port cp (Join-Path $ProjectDir "main.py") :main.py
 
 Write-Host "Upload complete. Resetting ESP32..."
 & mpremote connect $Port reset
