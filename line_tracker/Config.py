@@ -1,11 +1,11 @@
 # 小车硬件与控制参数集中配置。
 
 # 左右轮正常巡线基础占空比 (0~1023)。
-LEFT_BASE_DUTY = 880
-RIGHT_BASE_DUTY = 880
+LEFT_BASE_DUTY = 950
+RIGHT_BASE_DUTY = 950
 
 # PWM 输出最大占空比。
-MAX_DUTY = 1000
+MAX_DUTY = 1023
 
 # PWM 输出最小占空比，非零输出不低于此值。
 MIN_DUTY = 600
@@ -50,13 +50,12 @@ MOTOR_MODE = "sub"
 STOP_WHEN_LOST = False
 
 # 丢线后原地转弯找线占空比。
-LOST_TURN_DUTY = 800
+LOST_TURN_DUTY = 920
 
 # PID 参数。
-KP = 200
+KP = 250
 KI = 0.0
-KD = 2
-
+KD = 8
 # 主循环周期，单位 ms。
 CONTROL_PERIOD_MS = 5
 
