@@ -54,14 +54,24 @@ function Sync-AsciiBuildDir {
     }
 
     New-Item -ItemType Directory -Force $BuildDir | Out-Null
-    New-Item -ItemType Directory -Force (Join-Path $BuildDir "main") | Out-Null
 
     Copy-Item -LiteralPath (Join-Path $ScriptDir "CMakeLists.txt") -Destination $BuildDir -Force
     Copy-Item -LiteralPath (Join-Path $ScriptDir "sdkconfig.defaults") -Destination $BuildDir -Force
     Copy-Item -LiteralPath (Join-Path $ScriptDir "README.md") -Destination $BuildDir -Force
     Copy-Item -LiteralPath (Join-Path $ScriptDir ".gitignore") -Destination $BuildDir -Force -ErrorAction SilentlyContinue
+
     $srcMainDir = Join-Path $ScriptDir "main"
-    Copy-Item -LiteralPath (Join-Path $srcMainDir "*") -Destination (Join-Path $BuildDir "main") -Recurse -Force
+    $destMainDir = Join-Path $BuildDir "main"
+    if (Test-Path -LiteralPath $destMainDir) {
+        Remove-Item -LiteralPath $destMainDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force $destMainDir | Out-Null
+    Copy-Item -Path (Join-Path $srcMainDir "*") -Destination $destMainDir -Recurse -Force
+
+    $buildCacheDir = Join-Path $BuildDir "build"
+    if (Test-Path -LiteralPath $buildCacheDir) {
+        Remove-Item -LiteralPath $buildCacheDir -Recurse -Force
+    }
 }
 
 function Assert-PortExists {

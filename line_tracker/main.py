@@ -3,6 +3,7 @@ from algorithms.line_position import LinePositionEstimator
 from algorithms.pid import PIDController
 from applications.line_tracking_app import LineTrackingApp
 from decisions.line_following_policy import LineFollowingPolicy
+from interfaces.attitude_link import AttitudeLink
 from interfaces.gray_sensor import GraySensorArray
 from interfaces.motor_driver import DCMotor, DifferentialDrive
 
@@ -53,7 +54,20 @@ def build_app():
         config.STOP_WHEN_LOST,
         config.LOST_TURN_DUTY,
         config.REVERSE_ON_LOW_DUTY,
+        config.CAMERA_MIN_QUALITY,
+        config.CAMERA_MAX_SLOWDOWN,
+        config.CAMERA_TURN_FF_DUTY,
     )
+
+    attitude_link = None
+    if config.USE_CAMERA_ASSIST:
+        attitude_link = AttitudeLink(
+            config.CAMERA_UART_RX_PIN,
+            config.CAMERA_UART_TX_PIN,
+            config.CAMERA_UART_BAUDRATE,
+            config.CAMERA_UART_TIMEOUT_MS,
+            config.CAMERA_UART_DEBUG_PRINT,
+        )
 
     return LineTrackingApp(
         sensors,
@@ -61,6 +75,7 @@ def build_app():
         policy,
         config.CONTROL_PERIOD_MS,
         config.DEBUG_PRINT,
+        attitude_link,
     )
 
 

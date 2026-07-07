@@ -38,8 +38,8 @@ static camera_config_t camera_config = {
     .xclk_freq_hz = 20000000,
     .ledc_timer   = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
-    .pixel_format = PIXFORMAT_RGB565,
-    .frame_size   = FRAMESIZE_QVGA,
+    .pixel_format = PIXFORMAT_GRAYSCALE,
+    .frame_size   = FRAMESIZE_QQVGA,
     .jpeg_quality = 12,
     .fb_count     = 2,
     .fb_location  = CAMERA_FB_IN_PSRAM,
@@ -76,13 +76,13 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_ret);
     }
 
-    ESP_LOGI(TAG, "S3-CAM starting: camera + IMU + UART");
+    ESP_LOGI(TAG, "S3-CAM starting: Wi-Fi first, then camera + IMU + UART");
 
-    camera_web_init(&camera_config);
-    xTaskCreate(camera_vision_task, "camera_vision_task", 4096, NULL, 4, NULL);
     wifi_ap_init();
     uart_link_init();
     i2c_bus_init();
+    camera_web_init(&camera_config);
+    xTaskCreate(camera_vision_task, "camera_vision_task", 4096, NULL, 4, NULL);
 
     if (imu_attach(i2c_bus)) {
         xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);

@@ -54,10 +54,11 @@ void uart_link_send_imu(int seq, float pitch, float roll, float yaw)
 }
 
 void uart_link_send_camera(int seq, float near_x, float far_x,
-                           float curve, float quality)
+                           float curve, float quality,
+                           int turn, float slowdown)
 {
-    char body[80];
-    snprintf(body, sizeof(body), "CAM,%d,%.2f,%.2f,%.2f,%.2f",
-             seq, near_x, far_x, curve, quality);
+    char body[96];
+    snprintf(body, sizeof(body), "CAM,%d,%.2f,%.2f,%.2f,%.2f,%d,%.2f",
+             seq, near_x, far_x, curve, quality, turn, slowdown);
     uart_link_send_packet(body);
 }
