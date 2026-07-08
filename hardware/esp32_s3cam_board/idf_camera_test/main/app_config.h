@@ -49,12 +49,23 @@
 #define CONTROL_PERIOD_MS    10
 #define IMU_PRINT_PERIOD_MS  200
 
-#define VISION_PERIOD_MS          120
+#define CAMERA_STREAM_JPEG_QUALITY  60
+#define CAMERA_STREAM_DELAY_MS      20
+
+#define VISION_PERIOD_MS          60
+#define VISION_LOG_PERIOD_MS      500
 #define VISION_BLACK_Y_THRESHOLD  70
 #define VISION_SAMPLE_STEP_X      4
 #define VISION_SAMPLE_STEP_Y      4
 #define VISION_ROI_HEIGHT         28
 #define VISION_NEAR_ROW_NUM       3
 #define VISION_NEAR_ROW_DEN       4
+#define VISION_MID_ROW_NUM        5
+#define VISION_MID_ROW_DEN        8
 #define VISION_FAR_ROW_NUM        1
 #define VISION_FAR_ROW_DEN        2
+#define VISION_LOOK_ROW_NUM       3
+#define VISION_LOOK_ROW_DEN       8
+#define VISION_TURN_THRESHOLD     0.10f
+#define VISION_TURN_MIN_QUALITY   0.25f
+#define VISION_FULL_SLOWDOWN      0.35f

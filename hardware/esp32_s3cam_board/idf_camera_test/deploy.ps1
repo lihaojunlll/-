@@ -1,7 +1,8 @@
 param(
     [string]$Port = "COM12",
     [switch]$Monitor,
-    [switch]$NoPrompt
+    [switch]$NoPrompt,
+    [switch]$Clean
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,20 +49,66 @@ If you use the VS Code ESP-IDF extension, open the ESP-IDF Terminal there and ru
 "@
 }
 
+function Copy-IfChanged {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source,
+        [Parameter(Mandatory = $true)]
+        [string]$Destination
+    )
+
+    if (-not (Test-Path -LiteralPath $Source)) {
+        return
+    }
+
+    $shouldCopy = $true
+    if (Test-Path -LiteralPath $Destination) {
+        $srcHash = (Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash
+        $dstHash = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash
+        $shouldCopy = $srcHash -ne $dstHash
+    }
+
+    if ($shouldCopy) {
+        Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    }
+}
+
+function Invoke-RobocopyMirror {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceDir,
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationDir
+    )
+
+    New-Item -ItemType Directory -Force $DestinationDir | Out-Null
+    & robocopy $SourceDir $DestinationDir /MIR /FFT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -gt 7) {
+        throw "robocopy failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Sync-AsciiBuildDir {
     if (-not (Test-Path "C:\Espressif")) {
         throw "C:\Espressif not found. Install ESP-IDF first."
     }
 
     New-Item -ItemType Directory -Force $BuildDir | Out-Null
-    New-Item -ItemType Directory -Force (Join-Path $BuildDir "main") | Out-Null
 
-    Copy-Item -LiteralPath (Join-Path $ScriptDir "CMakeLists.txt") -Destination $BuildDir -Force
-    Copy-Item -LiteralPath (Join-Path $ScriptDir "sdkconfig.defaults") -Destination $BuildDir -Force
-    Copy-Item -LiteralPath (Join-Path $ScriptDir "README.md") -Destination $BuildDir -Force
-    Copy-Item -LiteralPath (Join-Path $ScriptDir ".gitignore") -Destination $BuildDir -Force -ErrorAction SilentlyContinue
+    Copy-IfChanged -Source (Join-Path $ScriptDir "CMakeLists.txt") -Destination (Join-Path $BuildDir "CMakeLists.txt")
+    Copy-IfChanged -Source (Join-Path $ScriptDir "sdkconfig.defaults") -Destination (Join-Path $BuildDir "sdkconfig.defaults")
+    Copy-IfChanged -Source (Join-Path $ScriptDir "README.md") -Destination (Join-Path $BuildDir "README.md")
+    Copy-IfChanged -Source (Join-Path $ScriptDir ".gitignore") -Destination (Join-Path $BuildDir ".gitignore")
+
     $srcMainDir = Join-Path $ScriptDir "main"
-    Copy-Item -LiteralPath (Join-Path $srcMainDir "*") -Destination (Join-Path $BuildDir "main") -Recurse -Force
+    $destMainDir = Join-Path $BuildDir "main"
+    Invoke-RobocopyMirror -SourceDir $srcMainDir -DestinationDir $destMainDir
+
+    $buildCacheDir = Join-Path $BuildDir "build"
+    if ($Clean -and (Test-Path -LiteralPath $buildCacheDir)) {
+        Write-Host "Cleaning build cache: $buildCacheDir"
+        Remove-Item -LiteralPath $buildCacheDir -Recurse -Force
+    }
 }
 
 function Assert-PortExists {

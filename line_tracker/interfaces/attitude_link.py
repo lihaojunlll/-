@@ -20,6 +20,8 @@ class AttitudeLink:
         self.cam_far = 0.0
         self.cam_curve = 0.0
         self.cam_quality = 0.0
+        self.cam_turn = 0
+        self.cam_slowdown = 0.0
         self.last_cam_update_ms = 0
         self.lost_packets = 0
         self.cam_lost_packets = 0
@@ -103,7 +105,7 @@ class AttitudeLink:
 
     def _parse_camera_body(self, body):
         parts = body.split(",")
-        if len(parts) != 6:
+        if len(parts) not in (6, 8):
             self.bad_packets += 1
             return False
 
@@ -113,6 +115,8 @@ class AttitudeLink:
             far = float(parts[3])
             curve = float(parts[4])
             quality = float(parts[5])
+            turn = int(parts[6]) if len(parts) >= 7 else 0
+            slowdown = float(parts[7]) if len(parts) >= 8 else abs(curve)
         except ValueError:
             self.bad_packets += 1
             return False
@@ -127,11 +131,19 @@ class AttitudeLink:
         self.cam_far = max(-1.0, min(1.0, far))
         self.cam_curve = max(-1.0, min(1.0, curve))
         self.cam_quality = max(0.0, min(1.0, quality))
+        if turn < 0:
+            self.cam_turn = -1
+        elif turn > 0:
+            self.cam_turn = 1
+        else:
+            self.cam_turn = 0
+        self.cam_slowdown = max(0.0, min(1.0, slowdown))
         self.last_cam_update_ms = time.ticks_ms()
 
         if self.debug_print:
-            print("UART_CAM,%d,%.2f,%.2f,%.2f,%.2f" % (
-                seq, near, far, curve, quality))
+            print("UART_CAM,%d,%.2f,%.2f,%.2f,%.2f,%d,%.2f" % (
+                seq, near, far, curve, quality,
+                self.cam_turn, self.cam_slowdown))
         return True
 
     def update(self):
@@ -167,6 +179,8 @@ class AttitudeLink:
             "cam_far": self.cam_far,
             "cam_curve": self.cam_curve,
             "cam_quality": self.cam_quality,
+            "cam_turn": self.cam_turn,
+            "cam_slowdown": self.cam_slowdown,
             "lost_packets": self.lost_packets,
             "cam_lost_packets": self.cam_lost_packets,
             "bad_packets": self.bad_packets,
