@@ -1,11 +1,11 @@
 # 小车硬件与控制参数集中配置。
 
 # 左右轮正常巡线基础占空比 (0~1023)。
-LEFT_BASE_DUTY = 950
-RIGHT_BASE_DUTY = 950
+LEFT_BASE_DUTY = 900
+RIGHT_BASE_DUTY = 900
 
 # PWM 输出最大占空比。
-MAX_DUTY = 1023
+MAX_DUTY = 1000
 
 # PWM 输出最小占空比，非零输出不低于此值。
 MIN_DUTY = 600
@@ -50,19 +50,18 @@ MOTOR_MODE = "sub"
 STOP_WHEN_LOST = False
 
 # 丢线后原地转弯找线占空比。
-LOST_TURN_DUTY = 920
+LOST_TURN_DUTY = 880  #880: 850    900:880
 
 # PID 参数。
-KP = 250
-KP = 250
+KP = 220    #880:200   900
 KI = 0.0
-KD = 2
+KD = 2.4      #880: 4
 
 # 主循环周期，单位 ms。
-CONTROL_PERIOD_MS = 5
+CONTROL_PERIOD_MS = 2
 
 # Camera feedforward. S3CAM TX GPIO45 -> main RX GPIO22; S3CAM RX GPIO46 -> main TX GPIO23.
-USE_CAMERA_ASSIST = True
+USE_CAMERA_ASSIST = False
 CAMERA_UART_RX_PIN = 22
 CAMERA_UART_TX_PIN = 23
 CAMERA_UART_BAUDRATE = 115200

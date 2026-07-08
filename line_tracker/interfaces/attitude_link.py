@@ -37,20 +37,25 @@ class AttitudeLink:
 
     def _split_and_check(self, raw):
         if "*" not in raw:
-            return raw
+            self.bad_packets += 1
+            if self.debug_print:
+                print("UART_NO_CRC", raw[:40])
+            return None
 
         body, crc_text = raw.rsplit("*", 1)
         try:
             received = int(crc_text, 16)
         except ValueError:
             self.bad_packets += 1
+            if self.debug_print:
+                print("UART_BAD_CRC_HEX", raw[:40])
             return None
 
         expected = self._checksum(body)
         if received != expected:
             self.bad_packets += 1
             if self.debug_print:
-                print("UART_BAD_CRC,%s,%02X" % (raw, expected))
+                print("UART_BAD_CRC,%02X!=%02X %s" % (received, expected, raw[:40]))
             return None
         return body
 
@@ -58,19 +63,30 @@ class AttitudeLink:
         try:
             raw = line.decode().strip()
         except Exception:
+            if self.debug_print:
+                print("UART_DECODE_ERR")
             self.bad_packets += 1
             return False
 
         if not (raw.startswith("IMU,") or raw.startswith("CAM,")):
+            if self.debug_print and len(raw) > 0:
+                print("UART_SKIP", raw[:40])
             return False
 
         body = self._split_and_check(raw)
         if body is None:
+            if self.debug_print:
+                print("UART_CRC_FAIL", raw[:40])
             return False
 
         if body.startswith("CAM,"):
             return self._parse_camera_body(body)
-        return self._parse_imu_body(body)
+        elif body.startswith("IMU,"):
+            return self._parse_imu_body(body)
+
+        if self.debug_print:
+            print("UART_UNKNOWN", body[:40])
+        return False
 
     def _parse_imu_body(self, body):
         parts = body.split(",")
@@ -143,7 +159,8 @@ class AttitudeLink:
         if self.debug_print:
             print("UART_CAM,%d,%.2f,%.2f,%.2f,%.2f,%d,%.2f" % (
                 seq, near, far, curve, quality,
-                self.cam_turn, self.cam_slowdown))
+                turn if len(parts) >= 7 else 0,
+                slowdown))
         return True
 
     def update(self):

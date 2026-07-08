@@ -67,7 +67,7 @@
 #define CAM_SENSOR_HMIRROR          1
 #define CAM_SENSOR_VFLIP            0
 
-#define VISION_PERIOD_MS          60
+#define VISION_PERIOD_MS          120
 #define VISION_LOG_PERIOD_MS      500
 #define VISION_BLACK_Y_THRESHOLD  70
 #define VISION_SAMPLE_STEP_X      4

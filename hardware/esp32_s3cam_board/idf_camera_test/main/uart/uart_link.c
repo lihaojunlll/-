@@ -60,5 +60,6 @@ void uart_link_send_camera(int seq, float near_x, float far_x,
     char body[96];
     snprintf(body, sizeof(body), "CAM,%d,%.2f,%.2f,%.2f,%.2f,%d,%.2f",
              seq, near_x, far_x, curve, quality, turn, slowdown);
+    ESP_LOGI(TAG, "TX %s", body);
     uart_link_send_packet(body);
 }

@@ -84,10 +84,6 @@ void app_main(void)
     camera_web_init(&camera_config);
     xTaskCreate(camera_vision_task, "camera_vision_task", 4096, NULL, 4, NULL);
 
-    if (imu_attach(i2c_bus)) {
-        xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
-    }
-
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
     }

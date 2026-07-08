@@ -20,6 +20,8 @@ class LineFollowingPolicy:
         self.camera_min_quality = camera_min_quality
         self.camera_max_slowdown = camera_max_slowdown
         self.camera_turn_ff_duty = camera_turn_ff_duty
+        self._pos_history = [0] * 6
+        self._pos_idx = 0
 
     def decide(self, black_flags, dt, camera=None):
         speed_scale, turn_ff, camera_active = self._camera_assist(camera)
@@ -101,9 +103,18 @@ class LineFollowingPolicy:
         return sign * int(value)
 
     def _remember_seen_side(self, position):
-        if position < 0:
+        self._pos_history[self._pos_idx] = position
+        self._pos_idx = (self._pos_idx + 1) % len(self._pos_history)
+        left_weight = 0
+        right_weight = 0
+        for p in self._pos_history:
+            if p < -0.05:
+                left_weight += 1
+            elif p > 0.05:
+                right_weight += 1
+        if left_weight > right_weight:
             self.last_seen_side = -1
-        elif position > 0:
+        elif right_weight > left_weight:
             self.last_seen_side = 1
 
     def _camera_assist(self, camera):

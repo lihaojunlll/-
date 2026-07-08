@@ -15,6 +15,7 @@ class LineTrackingApp:
     def run(self):
         print("Line tracking app started.")
         last_time = time.ticks_ms()
+        last_print_ms = 0
 
         try:
             while True:
@@ -33,14 +34,21 @@ class LineTrackingApp:
                 right_duty = decision["right_duty"]
                 self.drive.set_duty(left_duty, right_duty)
 
-                if self.debug_print:
+                if self.debug_print and time.ticks_diff(now, last_print_ms) >= 200:
+                    last_print_ms = now
+                    cam_str = ""
+                    if camera and camera.get("cam_fresh"):
+                        cam_str = "cam_q={:.2f} slow={:.2f} turn={} ".format(
+                            camera.get("cam_quality", 0),
+                            camera.get("cam_slowdown", 0),
+                            camera.get("cam_turn", 0))
                     print(
-                        "raw={} black={} pos={:.2f} found={} cam={} scale={:.2f} ff={} dt={:.3f} L={} R={}".format(
+                        "raw={} black={} pos={:.2f} found={} {}scale={:.2f} ff={} dt={:.3f} L={} R={}".format(
                             raw_values,
                             black_flags,
                             decision["position"],
                             1 if decision["line_found"] else 0,
-                            1 if decision["camera_active"] else 0,
+                            cam_str,
                             decision["camera_speed_scale"],
                             decision["camera_turn_ff"],
                             dt,
