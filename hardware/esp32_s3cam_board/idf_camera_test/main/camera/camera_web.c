@@ -304,18 +304,19 @@ void camera_web_init(camera_config_t *config)
     if (sensor != NULL) {
         ESP_LOGI(TAG, "sensor PID=0x%02x VER=0x%02x MIDL=0x%02x MIDH=0x%02x",
                  sensor->id.PID, sensor->id.VER, sensor->id.MIDL, sensor->id.MIDH);
-        int effect_ret = sensor->set_special_effect(sensor, 2);
-        int saturation_ret = sensor->set_saturation(sensor, -2);
-        sensor->set_brightness(sensor, 0);
-        sensor->set_contrast(sensor, 2);
-        sensor->set_gain_ctrl(sensor, 0);
-        sensor->set_exposure_ctrl(sensor, 0);
-        sensor->set_aec_value(sensor, 400);
-        sensor->set_agc_gain(sensor, 0);
-        sensor->set_hmirror(sensor, 1);
-        sensor->set_vflip(sensor, 0);
-        ESP_LOGI(TAG, "force grayscale: special_effect=%d saturation=%d contrast=2 aec=400 hmirror=1",
-                 effect_ret, saturation_ret);
+        int effect_ret = sensor->set_special_effect(sensor, CAM_SENSOR_SPECIAL_EFFECT);
+        int saturation_ret = sensor->set_saturation(sensor, CAM_SENSOR_SATURATION);
+        sensor->set_brightness(sensor, CAM_SENSOR_BRIGHTNESS);
+        sensor->set_contrast(sensor, CAM_SENSOR_CONTRAST);
+        sensor->set_gain_ctrl(sensor, CAM_SENSOR_GAIN_CTRL);
+        sensor->set_exposure_ctrl(sensor, CAM_SENSOR_EXPOSURE_CTRL);
+        sensor->set_aec_value(sensor, CAM_SENSOR_AEC_VALUE);
+        sensor->set_agc_gain(sensor, CAM_SENSOR_AGC_GAIN);
+        sensor->set_hmirror(sensor, CAM_SENSOR_HMIRROR);
+        sensor->set_vflip(sensor, CAM_SENSOR_VFLIP);
+        ESP_LOGI(TAG, "sensor config: special_effect=%d saturation=%d contrast=%d aec=%d hmirror=%d",
+                 effect_ret, saturation_ret,
+                 CAM_SENSOR_CONTRAST, CAM_SENSOR_AEC_VALUE, CAM_SENSOR_HMIRROR);
     }
     ESP_LOGI(TAG, "Camera initialized");
 

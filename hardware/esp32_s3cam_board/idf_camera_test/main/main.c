@@ -35,15 +35,15 @@ static camera_config_t camera_config = {
     .pin_href  = CAM_PIN_HREF,
     .pin_pclk  = CAM_PIN_PCLK,
 
-    .xclk_freq_hz = 20000000,
+    .xclk_freq_hz = CAM_XCLK_FREQ_HZ,
     .ledc_timer   = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
     .pixel_format = PIXFORMAT_GRAYSCALE,
     .frame_size   = FRAMESIZE_QVGA,
     .jpeg_quality = 12,
-    .fb_count     = 2,
+    .fb_count     = CAM_FB_COUNT,
     .fb_location  = CAMERA_FB_IN_PSRAM,
-    .grab_mode    = CAMERA_GRAB_LATEST,
+    .grab_mode    = CAM_GRAB_MODE,
 };
 
 static i2c_master_bus_handle_t i2c_bus;

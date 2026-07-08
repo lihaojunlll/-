@@ -52,6 +52,21 @@
 #define CAMERA_STREAM_JPEG_QUALITY  60
 #define CAMERA_STREAM_DELAY_MS      20
 
+#define CAM_XCLK_FREQ_HZ       20000000
+#define CAM_FB_COUNT           2
+#define CAM_GRAB_MODE          CAMERA_GRAB_LATEST
+
+#define CAM_SENSOR_CONTRAST         2
+#define CAM_SENSOR_BRIGHTNESS       0
+#define CAM_SENSOR_AEC_VALUE        400
+#define CAM_SENSOR_GAIN_CTRL        0
+#define CAM_SENSOR_EXPOSURE_CTRL    0
+#define CAM_SENSOR_AGC_GAIN         0
+#define CAM_SENSOR_SPECIAL_EFFECT   2
+#define CAM_SENSOR_SATURATION       -2
+#define CAM_SENSOR_HMIRROR          1
+#define CAM_SENSOR_VFLIP            0
+
 #define VISION_PERIOD_MS          60
 #define VISION_LOG_PERIOD_MS      500
 #define VISION_BLACK_Y_THRESHOLD  70
@@ -67,5 +82,5 @@
 #define VISION_LOOK_ROW_NUM       3
 #define VISION_LOOK_ROW_DEN       8
 #define VISION_TURN_THRESHOLD     0.10f
-#define VISION_TURN_MIN_QUALITY   0.25f
-#define VISION_FULL_SLOWDOWN      0.35f
+#define VISION_TURN_MIN_QUALITY   0.2f
+#define VISION_FULL_SLOWDOWN      0.4f
