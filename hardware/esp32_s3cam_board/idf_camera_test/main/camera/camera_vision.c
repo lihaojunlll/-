@@ -126,16 +126,6 @@ static route_hint_t classify_route(roi_result_t near_roi,
     if (mid_roi.quality < quality) quality = mid_roi.quality;
     if (far_roi.quality < quality) quality = far_roi.quality;
 
-    float mid_offset = mid_roi.center - near_roi.center;
-    float far_offset = far_roi.center - near_roi.center;
-    float look_offset = 0.0f;
-    if (look_roi.quality >= VISION_TURN_MIN_QUALITY) {
-        look_offset = look_roi.center - near_roi.center;
-    }
-    float turn_score = clamp_unit(mid_offset * 0.25f +
-                                  far_offset * 0.45f +
-                                  look_offset * 0.30f);
-
     route_hint_t hint = {
         .turn = 0,
         .slowdown = 0.0f,
@@ -146,11 +136,32 @@ static route_hint_t classify_route(roi_result_t near_roi,
         return hint;
     }
 
+    float look_center = far_roi.center;
+    if (look_roi.quality >= VISION_TURN_MIN_QUALITY) {
+        look_center = look_roi.center;
+    }
+
+    float target_score = near_roi.center * 0.10f +
+                         mid_roi.center * 0.20f +
+                         far_roi.center * 0.30f +
+                         look_center * 0.40f;
+    float curve_score = (far_roi.center - near_roi.center) * 0.45f +
+                        (look_center - near_roi.center) * 0.35f;
+    float turn_score = clamp_unit(target_score * 0.65f + curve_score * 0.35f);
+
     float abs_score = fabsf(turn_score);
     if (abs_score >= VISION_TURN_THRESHOLD) {
         hint.turn = turn_score > 0.0f ? 1 : -1;
     }
-    hint.slowdown = clamp_01(abs_score / VISION_FULL_SLOWDOWN);
+
+    float ahead_score = fabsf(target_score);
+    float curve_abs = fabsf(curve_score);
+    if (curve_abs > ahead_score) {
+        ahead_score = curve_abs;
+    }
+    float bend_deadband = 0.05f;
+    hint.slowdown = clamp_01((ahead_score - bend_deadband) /
+                             (VISION_FULL_SLOWDOWN - bend_deadband));
     return hint;
 }
 
@@ -175,6 +186,9 @@ static void camera_vision_set_state(int seq,
                                     roi_result_t mid_roi,
                                     roi_result_t far_roi,
                                     roi_result_t look_roi,
+                                    int fit_count,
+                                    const int *fit_y,
+                                    const roi_result_t *fit_roi,
                                     float curve,
                                     float quality,
                                     route_hint_t route)
@@ -203,8 +217,15 @@ static void camera_vision_set_state(int seq,
         .far_samples = far_roi.sample_count,
         .look_black = look_roi.black_count,
         .look_samples = look_roi.sample_count,
+        .fit_count = fit_count,
         .update_us = esp_timer_get_time(),
     };
+
+    for (int i = 0; i < fit_count && i < CAMERA_VISION_FIT_POINTS; i++) {
+        state.fit_x[i] = fit_roi[i].center;
+        state.fit_y[i] = fit_y[i];
+        state.fit_quality[i] = fit_roi[i].quality;
+    }
 
     portENTER_CRITICAL(&s_vision_state_lock);
     s_vision_state = state;
@@ -242,6 +263,19 @@ void camera_vision_task(void *arg)
         roi_result_t mid_roi = analyze_roi(fb, mid_y);
         roi_result_t far_roi = analyze_roi(fb, far_y);
         roi_result_t look_roi = analyze_roi(fb, look_y);
+
+        int fit_y[CAMERA_VISION_FIT_POINTS];
+        roi_result_t fit_roi[CAMERA_VISION_FIT_POINTS];
+        int fit_top_y = look_y;
+        int fit_bottom_y = near_y;
+        for (int i = 0; i < CAMERA_VISION_FIT_POINTS; i++) {
+            int y = fit_top_y;
+            if (CAMERA_VISION_FIT_POINTS > 1) {
+                y = fit_top_y + ((fit_bottom_y - fit_top_y) * i) / (CAMERA_VISION_FIT_POINTS - 1);
+            }
+            fit_y[i] = y;
+            fit_roi[i] = analyze_roi(fb, y);
+        }
         esp_camera_fb_return(fb);
 
         float quality = near_roi.quality;
@@ -258,6 +292,7 @@ void camera_vision_task(void *arg)
         camera_vision_set_state(seq, frame_width, frame_height,
                                 near_y, mid_y, far_y, look_y,
                                 near_roi, mid_roi, far_roi, look_roi,
+                                CAMERA_VISION_FIT_POINTS, fit_y, fit_roi,
                                 curve, quality, route);
         uart_link_send_camera(seq, near_roi.center, far_roi.center, curve,
                               quality, route.turn, route.slowdown);

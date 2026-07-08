@@ -36,12 +36,12 @@ GRAY_SENSOR_ENABLED = (True, True, True, True, True)
 
 # 黑白判断阈值。
 GRAY_THRESHOLDS = (120, 100, 100, 100, 100)
-
+0
 # False 表示 raw 大于等于阈值时判定为黑线。
 BLACK_WHEN_RAW_BELOW_THRESHOLD = False
 
 # 五路传感器位置权重，用于计算偏差，左负右正。
-SENSOR_WEIGHTS = (-2, -1, 0, 1, 2)
+SENSOR_WEIGHTS = (-2, -1.0, 0, 1.0, 2)
 
 # 电机差速模式: "both"=一边加一边减, "add"=只加, "sub"=只减。
 MOTOR_MODE = "sub"
@@ -53,9 +53,9 @@ STOP_WHEN_LOST = False
 LOST_TURN_DUTY = 800
 
 # PID 参数。
-KP = 200
+KP = 250
 KI = 0.0
-KD = 2
+KD = 3.2
 
 # 主循环周期，单位 ms。
 CONTROL_PERIOD_MS = 5
@@ -68,8 +68,8 @@ CAMERA_UART_BAUDRATE = 115200
 CAMERA_UART_TIMEOUT_MS = 500
 CAMERA_UART_DEBUG_PRINT = False
 CAMERA_MIN_QUALITY = 0.25
-CAMERA_MAX_SLOWDOWN = 0.25
-CAMERA_TURN_FF_DUTY = 60
+CAMERA_MAX_SLOWDOWN = 0.35
+CAMERA_TURN_FF_DUTY = 0
 
 # 是否打印调试信息。
 DEBUG_PRINT = True

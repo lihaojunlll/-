@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define CAMERA_VISION_FIT_POINTS 13
+
 typedef struct {
     int seq;
     int frame_width;
@@ -26,6 +28,10 @@ typedef struct {
     int far_samples;
     int look_black;
     int look_samples;
+    int fit_count;
+    float fit_x[CAMERA_VISION_FIT_POINTS];
+    int fit_y[CAMERA_VISION_FIT_POINTS];
+    float fit_quality[CAMERA_VISION_FIT_POINTS];
     int64_t update_us;
 } camera_vision_state_t;
 
